@@ -19,7 +19,7 @@ user_home = os.path.expanduser('~')
 
 # defaults
 t4iss_defaults           = dict()
-t4iss_defaults['t4iss_data'] = os.path.join(user_home,'.t4iss','data')
+t4iss_defaults['t4iss_data'] = os.path.join(user_home,'/Documents/Work/databases/MP')
 t4iss_defaults['t4iss_scratch'] = os.path.join(user_home,'.t4iss','scratch')
 t4iss_defaults['mcr_path'] = os.path.join(here,'mcr')
 t4iss_defaults['scripts_path'] = os.path.join(here,'scripts')
