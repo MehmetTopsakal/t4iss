@@ -1466,6 +1466,24 @@ class Dataset:
                       % (initial_m, final_m))
 
 
+    def scale(self, method='1'):
+        """Normalizes all spectra."""
+
+        if self.data_X is None or self.data_y is None:
+            raise ValueError("data_X or data_y not yet defined. Must convert to "
+                             "numpy arrays first.")
+
+        X = self.data_X
+
+        if method == '1':
+            # scale all spectra such that the maxima are 1.0
+            X_max = np.max(X, axis=1, keepdims=True)
+            X /= X_max
+            self.data_X = X
+        else:
+            raise RuntimeError("Method not supported.")
+
+
     def combine(self, new_data):
         """Combines new_data with the current Dataset class."""
 
