@@ -1171,8 +1171,14 @@ class Dataset:
         y_multiplier = np.zeros(self.data_y[0].shape)
 
         # these will be the values we keep
+        new_dictionary = {}
         for i in ce:
             y_multiplier[self.dictionary[i]] = 1
+
+        # ensures the correct order
+        for key, value in self.dictionary.items():
+          if key in ce:
+            new_dictionary[key] = value
 
         y_multiplier_invert = y_multiplier == 0
         y_temp = self.data_y * y_multiplier_invert
@@ -1202,6 +1208,7 @@ class Dataset:
         self.m = final_m
         self.c = y.shape[1]
         self.tracker = tracker
+        self.dictionary = new_dictionary
 
     
     def emergency_revert(self):
