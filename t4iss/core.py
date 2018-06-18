@@ -1456,7 +1456,46 @@ class Dataset:
             else:
                 print("  initial -> final number of training examples: %i->%i"
                       % (initial_m, final_m))
-  
+
+
+    def combine(self, new_data):
+        """Combines new_data with the current Dataset class."""
+
+        if self.data_X is None or self.data_y is None:
+            raise ValueError("data_X or data_y not yet defined. Must convert to "
+                             "numpy arrays first.")
+
+        if not type(new_data).__name__ == 'Dataset':
+            raise RuntimeError("New data is not of type core.Dataset.")
+
+        if self.c != new_data.c:
+            raise RuntimeError("Class mismatch: %i != %i" 
+                               % (self.c, new_data.c))
+
+        if self.n != new_data.n:
+            raise RuntimeError("Number of features mismatch: %i != %i" 
+                               % (self.n, new_data.n))
+
+        X = self.data_X
+        y = self.data_y
+        tracker = self.tracker
+
+        # stack them
+        X = np.concatenate((X, new_data.data_X))
+        y = np.concatenate((y, new_data.data_y))
+        tracker = np.concatenate((tracker, new_data.tracker))
+        previous_m = self.m
+        self.m += new_data.m
+
+        if self.verbose == 1:
+            print("Data stacked: data expanded %i -> %i"
+                  % (previous_m, self.m))
+
+        self.data_X = X
+        self.data_y = y
+        self.tracker = tracker
+
+
     def print_info(self, n_each_class=False, n_mixed=True, n_unique=True, 
                    suppress=True):
     
