@@ -1028,7 +1028,7 @@ class Dataset:
         else:
 
             # temporary dictionary sites
-            tds = {'T:4' : 0, 'S:5' : 1, 'O:6' : 2}
+            tds = {'O:6' : 0, 'S:5' : 1, 'T:4' : 2}
 
             # temporary counter sites
             tcs = 0
@@ -1450,10 +1450,10 @@ class Dataset:
                     for j in range(y.shape[1]):
                         if y[i][j] == 0 or y[i][j] == 1:
                             pass
-                    else:
-                        # this feature vector is mixed
-                        n_mixed_counter += 1
-                        break  # the inner loop
+                        else:
+                            # this feature vector is mixed
+                            n_mixed_counter += 1
+                            break  # the inner loop
                 print("The ratio of mixed/total is %i/%i" % (n_mixed_counter, self.m))
           
             if n_unique:
