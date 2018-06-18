@@ -1058,7 +1058,8 @@ class Dataset:
         self.original_tracker = tracker
 
     
-    def remove_outliers(self, remove_negative=True, remove_large=False):
+    def remove_outliers(self, remove_negative=True, remove_large=False,
+                        large_cutoff=3.0):
     
         if self.data_X is None or self.data_y is None:
             raise ValueError("data_X or data_y not yet defined. Must convert to "
@@ -1081,7 +1082,7 @@ class Dataset:
         # there are also some spectra that are so large they are likely errors
         # in the electronic structure calculations
         if remove_large:
-            X_bool = [X > 1.25][0]
+            X_bool = [X > large_cutoff][0]
             X_bool_s = np.sum(X_bool, axis=1)
             X_cutoff = X_bool_s != 0
             X = np.delete(X, np.where(X_cutoff)[0], axis=0)
