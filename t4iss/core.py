@@ -1029,6 +1029,7 @@ class Dataset:
 
             # temporary dictionary sites
             tds = {'O:6' : 0, 'S:5' : 1, 'T:4' : 2}
+            self.dictionary = tds
 
             # temporary counter sites
             tcs = 0
