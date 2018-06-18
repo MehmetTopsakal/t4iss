@@ -1059,7 +1059,8 @@ class Dataset:
 
     
     def remove_outliers(self, remove_negative=True, remove_large=False,
-                        large_cutoff=3.0):
+                        large_cutoff=3.0, advanced=False,
+                        advanced_parameter=100.0):
     
         if self.data_X is None or self.data_y is None:
             raise ValueError("data_X or data_y not yet defined. Must convert to "
@@ -1089,11 +1090,46 @@ class Dataset:
             y = np.delete(y, np.where(X_cutoff)[0], axis=0)
             tracker = np.delete(tracker, np.where(X_cutoff)[0], axis=0)
         
+        if advanced:
+            # compute the average spectrum
+            mean_spectrum = np.mean(X, axis=0)
+
+            # use broadcasting to shift all spectra by the average one
+            X_shift = X - mean_spectrum
+
+            # element-wise square
+            X_shift *= X_shift
+
+            # and sum
+            X_sum = np.sum(X_shift, axis=1, keepdims=True)
+
+            worst_val = max(X_sum)
+
+            X_shift = np.delete(X_shift, np.where(X_sum == max(X_sum))[0], axis=0)
+            X = np.delete(X, np.where(X_sum == max(X_sum))[0], axis=0)
+            y = np.delete(y, np.where(X_sum == max(X_sum))[0], axis=0)
+            tracker = np.delete(tracker, np.where(X_sum == max(X_sum))[0], axis=0)
+
+            X_sum = np.delete(X_sum, np.where(X_sum == max(X_sum))[0], axis=0)
+
+            next_worst_val = max(X_sum)
+
+            while worst_val - next_worst_val > advanced_parameter:
+                worst_val = next_worst_val
+                X_shift = np.delete(X_shift, np.where(X_sum == max(X_sum))[0], axis=0)
+                X = np.delete(X, np.where(X_sum == max(X_sum))[0], axis=0)
+                y = np.delete(y, np.where(X_sum == max(X_sum))[0], axis=0)
+                tracker = np.delete(tracker, np.where(X_sum == max(X_sum))[0], axis=0)
+                X_sum = np.delete(X_sum, np.where(X_sum == max(X_sum))[0], axis=0)
+                next_worst_val = max(X_sum)
+
+
         # ensure the extrapolation didn't make some values negative
         if remove_negative:
             X[X < 0.0] = 0.0
         
         final_m = X.shape[0]
+
         if self.verbose == 1:
             print("Outlier removal:")
             if final_m != initial_m:
@@ -1103,6 +1139,7 @@ class Dataset:
                 print("  No outliers.")
         print("  Negatives removed is set to %a." % remove_negative)
         print("  Remove large is set to %a." % remove_large)
+        print("  Advanced removal is set to %a." % advanced)
         
         self.data_X = X
         self.data_y = y
