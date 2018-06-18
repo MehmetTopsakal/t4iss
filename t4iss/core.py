@@ -863,6 +863,11 @@ class Dataset:
 
         else:
             raise TypeError("Input data/spec type combination not yet supported.")
+
+        # if the standardized grid was defined, that by construction must 
+        # represent the number of features
+        if self.standardized_grid is not None:
+            self.n = len(self.standardized_grid)
   
   
     def sanity_check(self):
@@ -1028,7 +1033,7 @@ class Dataset:
             # temporary counter sites
             tcs = 0
 
-            for ce in len(self.data):
+            for ce in range(len(self.data)):
                 for spectra in self.data[ce]:
 
                     # X 
