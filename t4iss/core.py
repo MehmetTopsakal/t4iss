@@ -738,9 +738,14 @@ class Dataset:
         ~ Options ~
         0 - silent running
         1 - output all information available
+    * standardized_grid_classwide (np array) If merging two datasets, one of
+      which has a standardized grid already defined for it, then specifying
+      the standardized grid ahead of time will interpolate all input data to
+      this given grid
     """
   
-    def __init__(self, data, spec='avg', name=None, verbose=1):
+    def __init__(self, data, spec='avg', name=None, verbose=1,
+                 standardized_grid_classwide=None):
 
         self.data = data
         self.type = type(data)
@@ -783,7 +788,11 @@ class Dataset:
 
         # are every one of the E0 grids the same upon initial input?
         self.grid_all_same = True
-        self.standardized_grid = None
+
+        if standardized_grid_classwide is None:
+            self.standardized_grid = None
+        else:
+            self.standardized_grid = standardized_grid_classwide
 
         # total number of labels (classes)
         # also the total number of unique coordination environments
@@ -903,6 +912,13 @@ class Dataset:
         elif self.grid_all_same:
             if self.verbose == 1:
                 print("Grid is already standardized, nothing will be changed.")
+
+        elif self.standardized_grid is not None:
+            # this is the special case in which a grid is provided, likely
+            # from another data set, the current data should be interpolated to
+            # this grid
+            if self.verbose == 1:
+                print("Grid has been provided, nothing will be changed.")
         
         elif self.spec == 'avg':
             all_n = []
