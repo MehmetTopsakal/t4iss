@@ -2,5 +2,8 @@ __pycache__
 .directory
 .ipynb_checkpoints
 .gitignore
+.vscode
 data
 donotupload
+test*
+.DS_Store
