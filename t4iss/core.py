@@ -1484,6 +1484,111 @@ class Dataset:
             raise RuntimeError("Method not supported.")
 
 
+    def mass_augment(self, maximum_new_data=1000, randint_min=0,
+                     randint_max=6, replace=False):
+        """Mass data synthesis of fake data from site-spectra. Should be run
+        after keeping only the minimum."""
+
+        if self.data_X is None or self.data_y is None:
+            raise ValueError("data_X or data_y not yet defined. Must convert to "
+                             "numpy arrays first.")
+
+        if self.spec == 'avg':
+            raise RuntimeError("Average data should not be mass augmented.")
+
+        distribution = self.get_distribution_unique().astype(int)
+
+        if np.any(distribution/max(distribution) != 1.0):
+            raise RuntimeError("Must run after keep_only.")
+
+        X_tensor = np.empty((distribution[0], self.n, self.c))
+        X = self.data_X
+        y = self.data_y
+        tracker = self.tracker
+
+        X_to_append = np.empty((maximum_new_data, self.n))
+        y_to_append = np.empty((maximum_new_data, self.c))
+        null_tracker = np.zeros((maximum_new_data, 1))
+
+        initial_m = self.m
+
+        index_counter = np.zeros(distribution.shape).astype(int)
+
+        for i in range(self.m):
+            for j in range(self.c):
+                if y[i, j] == 1:
+                    index = j
+                    break
+            X_tensor[index_counter[index], :, index] = X[i, :]
+            index_counter[index] += 1
+
+        total_counter = 0
+        while total_counter < maximum_new_data:
+
+            # for every class, generate a random integer representing the
+            # amount of contribution from that class
+            cvec = []
+            ctotal = 0
+            for __ in range(self.c):
+                cvec.append(np.random.randint(randint_min, randint_max))
+            #cvec = np.array(cvec)
+            
+            ctotal = np.sum(cvec)
+
+            # ensure we have a mixed result
+            if ctotal > 1 and not np.any((np.array(cvec)/ctotal) == 1.0):
+
+                # current counter for the running average
+                ccc = 0
+
+                # generate the normalized label
+                y_to_append[total_counter, :] = cvec/ctotal
+
+                running_average = np.zeros((ctotal, self.n))
+
+                # for every class type
+                for cc_index, cc in enumerate(cvec):
+
+                    # get that many random numbers that represent which
+                    # spectra of class ii to get
+                    which_X = np.random.randint(0, distribution[cc_index], 
+                                                size=cc)
+
+                    for j in which_X:
+                        running_average[ccc, :] = X_tensor[j, :, cc_index]
+                        ccc += 1
+
+                # sum
+                running_average = np.sum(running_average, axis=0, keepdims=True)
+
+                # scale it
+                running_average /= ctotal
+
+                # append it
+                X_to_append[total_counter, :] = running_average
+
+                total_counter += 1
+
+        if not replace:
+            X = np.concatenate((X, X_to_append))
+            y = np.concatenate((y, y_to_append))
+            tracker = np.concatenate((tracker, null_tracker))
+
+            self.tracker = tracker
+            self.data_X = X
+            self.data_y = y
+            self.m = self.data_X.shape[0]
+        else:
+            self.data_X = X_to_append
+            self.data_y = y_to_append
+            self.m = X_to_append.shape[0]
+            self.tracker = null_tracker
+
+        if self.verbose == 1:
+            print("Mass augment finished: %i -> %i" % (initial_m, self.m))
+            print("  Replace is %a" % replace)
+
+
     def combine(self, new_data):
         """Combines new_data with the current Dataset class."""
 
