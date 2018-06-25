@@ -1485,11 +1485,9 @@ class Dataset:
 
 
     def mass_augment(self, maximum_new_data=1000, randint_min=0,
-                     randint_max=6):
+                     randint_max=6, replace=False):
         """Mass data synthesis of fake data from site-spectra. Should be run
         after keeping only the minimum."""
-
-        from matplotlib import pyplot as plt
 
         if self.data_X is None or self.data_y is None:
             raise ValueError("data_X or data_y not yet defined. Must convert to "
@@ -1538,7 +1536,7 @@ class Dataset:
             ctotal = np.sum(cvec)
 
             # ensure we have a mixed result
-            if ctotal > 1:
+            if ctotal > 1 and not np.any((np.array(cvec)/ctotal) == 1.0):
 
                 # current counter for the running average
                 ccc = 0
@@ -1571,17 +1569,24 @@ class Dataset:
 
                 total_counter += 1
 
-        X = np.concatenate((X, X_to_append))
-        y = np.concatenate((y, y_to_append))
-        tracker = np.concatenate((tracker, null_tracker))
+        if not replace:
+            X = np.concatenate((X, X_to_append))
+            y = np.concatenate((y, y_to_append))
+            tracker = np.concatenate((tracker, null_tracker))
 
-        self.tracker = tracker
-        self.data_X = X
-        self.data_y = y
-        self.m = self.data_X.shape[0]
+            self.tracker = tracker
+            self.data_X = X
+            self.data_y = y
+            self.m = self.data_X.shape[0]
+        else:
+            self.data_X = X_to_append
+            self.data_y = y_to_append
+            self.m = X_to_append.shape[0]
+            self.tracker = null_tracker
 
         if self.verbose == 1:
             print("Mass augment finished: %i -> %i" % (initial_m, self.m))
+            print("  Replace is %a" % replace)
 
 
     def combine(self, new_data):
