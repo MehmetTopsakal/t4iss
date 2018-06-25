@@ -31,6 +31,7 @@ from . import t4iss_defaults
 from .core import mXANES
 
 
+
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # this reads POSCAR
@@ -131,7 +132,10 @@ def make_333_supercell(labels, natoms, lattice, positions):
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # this writes feff.inp
-def feff_write_inp(poscar_path,cai,dmax,rFMS,rSCF,corehole): 
+def feff_write_inp(structure,dmax=10.1,rFMS=8.1,rSCF=6.1,corehole='RPA',destination=None): 
+    
+    poscar_path = structure['poscar']
+    cai = structure['isite']
     
     [labels, natoms, lattice, positions, positions_dir] = readposcar(poscar_path)
     
@@ -175,7 +179,11 @@ def feff_write_inp(poscar_path,cai,dmax,rFMS,rSCF,corehole):
         ind = labels_short.index(s)
         atoms[i][3] = ind
  
-    f=open('feff.inp',"w+")    
+    if destination is None:
+        f=open('feff.inp',"w+")  
+    else:
+        f=open(os.path.join(destination,'feff.inp'),"w+")
+        
     f.write("""TITLE             
                                                    
 EDGE      K
@@ -247,122 +255,7 @@ def feff_read_xmu(xmudat='xmu.dat'):
 
           
             
-            
-#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ 
-# this reads available FEFF data
-def read_xanes_feff(mpid,absorption_specie,xanes_data=None,skip_missing=False,download_missing=False,mpr=None):
-    
-    if download_missing:
-        if not mpr:
-            download_missing = False
-            print('mpr key is needed for download_missing=True')
-            
-    
-    here = os.getcwd()
-    
-    if xanes_data is None:
-        xanes_data = t4iss_defaults['t4iss_xanes_data']  
-    
-  
-    os.chdir(xanes_data)
-    
-    if not os.path.isdir(mpid):
-        if download_missing:
-            from .mp_utils import download_xanes_from_MP
-            download_xanes_from_MP(mpr,mpid,absorption_specie,download_to=xanes_data)
-                
-    
-    if os.path.isfile(join(mpid,'CONTCAR')):
-        
-        os.chdir(mpid)
-
-        struct = mg.Structure.from_file("CONTCAR")
-        finder = SpacegroupAnalyzer(struct)
-        struct = finder.get_symmetrized_structure()
-        [sites, indices]  = struct.equivalent_sites, struct.equivalent_indices
-
-        s = []
-        for i in struct:
-            s.append(i.species_string)
-        if absorption_specie not in s:
-            if skip_missing:
-                print(mpid+' does not have '+absorption_specie+' element in it. Skipping...')
-                os.chdir(here)
-                return [[],[]] 
-            else:
-                raise ValueError(mpid+' does not have '+absorption_specie+' element in it. Please check...')
-                os.chdir(here)
-  
-
-        read_xanes = []
-        for i,s in enumerate(sites):
-            if s[0].species_string is absorption_specie:         
-                f = 'feff_{:03d}_{}-K'.format(indices[i][0]+1,absorption_specie)  
-                
-                if not os.path.isdir(f):
-                    if download_missing:
-                        from .mp_utils import download_xanes_from_MP
-                        download_xanes_from_MP(mpr,mpid,absorption_specie,download_to=xanes_data)         
-                    
-                if os.path.isdir(f):
-                    os.chdir(f)  
-                    pload = pickle.load(open('xanes.pkl', 'rb'))
-                    read_xanes.append(pload)
-                    os.chdir('..')
-                else:
-                    if skip_missing:
-                        print(f+' is not available in '+mpid+' folder of local database. Skipping...')
-                        os.chdir(here)
-                        return [[],[]] 
-                    else:
-                        raise FileNotFoundError(f+' is not available in '+mpid+' folder of local database')
-                        os.chdir(here)
-
-        # get E limits
-        minmaxs = []
-        for i in read_xanes:
-            minmaxs.append([min(i.E0),max(i.E0)])
-        minmaxs = np.array(minmaxs)    
-        irange = [max(minmaxs[:,0]),min(minmaxs[:,1])]   
-        e_int = np.linspace(irange[0],irange[1], int((irange[1]-irange[0])/0.1)+1  )
-
-        ave_xanes = e_int*0
-        ave_vcn = 0
-        site_xanes = []
-        counter = 0
-        for i in read_xanes:
-            i.transform(irange=irange,normalize=None,y0shift=None)
-            ave_xanes += i.I*i.multiplicity
-            site_xanes.append(mXANES(data=[i.E,i.I],structure=i.structure,xanesid=i.xanesid,source=i.source,
-                                     edge=i.edge,multiplicity=i.multiplicity)) 
-            if i.vcn:
-                ave_vcn += i.vcn*i.multiplicity 
-            else:
-                try:
-                    nnfinder = VoronoiNN(cutoff=10,allow_pathological=True)
-                    print(i.structure)
-                    vcn = nnfinder.get_cn(i.structure[0], i.structure[1], use_weights=True)
-                    ave_vcn += i.vcn*i.multiplicity 
-                except Exception as exc:
-                    print(exc)
-                    print('warning: vcn info is missing for site. ave_vnc is not correct. ')
-            counter += i.multiplicity
-        ave_xanes = ave_xanes/counter
-        ave_vcn = ave_vcn/counter
-        ave_xanes = mXANES(data=[e_int,ave_xanes],structure=[struct,-1,ave_vcn],xanesid=i.xanesid,source=i.source,edge=i.edge)   
-        os.chdir(here)
-        return [ave_xanes,site_xanes]
-    
-    else:
-        if skip_missing:
-            print(mpid+' is not available in local database. Skipping...')
-            os.chdir(here)
-            return [[],[]]
-        else:
-            raise FileNotFoundError(mpid+' is not available in local database.')
-            os.chdir(here)
-                    
+ 
             
             
 
