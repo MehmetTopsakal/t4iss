@@ -7,3 +7,4 @@ data
 donotupload
 test*
 .DS_Store
+.trash

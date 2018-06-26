@@ -4,10 +4,10 @@
 
 """Gets coordination environment and corresponding CSM."""
 
-# from pymatgen import Structure
-# from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-# from pymatgen.analysis.chemenv.coordination_environments\
-#     .coordination_geometry_finder import LocalGeometryFinder
+from pymatgen import Structure
+from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+from pymatgen.analysis.chemenv.coordination_environments\
+    .coordination_geometry_finder import LocalGeometryFinder
 from pymatgen.analysis.chemenv.coordination_environments\
      .chemenv_strategies import MultiWeightsChemenvStrategy
 from pymatgen.analysis.chemenv.coordination_environments\
