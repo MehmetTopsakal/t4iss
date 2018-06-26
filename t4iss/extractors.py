@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+"""All extractors."""
+
+# pylint: disable=C0103
+
 __author__ = "Matthew Carbone"
 __email__ = "x94carbone@gmail.com"
 __status__ = "Development"
@@ -10,18 +14,22 @@ import sys
 import pickle
 import os
 from copy import deepcopy
+from tqdm import tqdm
+
+import logging
+
 
 # local imports
-from cesym import get_cesym
+from t4iss.cesym import get_cesym
 from defaults import t4iss_defaults
-from core import read_xanes
+from t4iss.xanes import read_xanes
 
 # pymatgen imports
 import pymatgen as mg
 from pymatgen import Structure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from pymatgen.analysis.chemenv.coordination_environments\
-     .coordination_geometry_finder import LocalGeometryFinder as lgf
+     .coordination_geometry_finder import LocalGeometryFinder
 from pymatgen.analysis.chemenv.coordination_environments\
      .chemenv_strategies import MultiWeightsChemenvStrategy
 from pymatgen.analysis.chemenv.coordination_environments\
@@ -29,8 +37,8 @@ from pymatgen.analysis.chemenv.coordination_environments\
 
 strategy = MultiWeightsChemenvStrategy.stats_article_weights_parameters()
 
-def extract_sites_o6_s5_t4(search_pattern,species, transition, path=None,
-                           save_as='site_data.pkl', verbose=1):
+def extract_sites_o6_s5_t4(species, transition, path=None,
+                           save_as='site_data.pkl', verbose=0):
     """From a directory containing structure/spectra data of various crystal
     structures from the Materials Project, extract and store all site data
     corresponding to the O:6, S:5 and T:4 chemical environments.
@@ -38,8 +46,6 @@ def extract_sites_o6_s5_t4(search_pattern,species, transition, path=None,
     ~ Note: this script takes a long time to run, be patient! ~
 
     :Input:
-    - search_pattern (string) general chemical formula of the structures
-      desired. For example: 'Ti-O'.
     - species (string) the atom of focus for the XANES spectrum. For example:
       'Ti'.
     - path (string) override the default path if desired. Should be the
@@ -50,9 +56,12 @@ def extract_sites_o6_s5_t4(search_pattern,species, transition, path=None,
       indicator. 1 by default.
     """
 
+    logger = logging.getLogger()
+    logger.setLevel(logging.CRITICAL)
+
     # set the path to where the extracted data is located
     if path is None:
-        path = t4iss_defaults['t4iss_data']
+        path = t4iss_defaults['t4iss_xanes_data']
     # e.g.
     # path = os.path.join(os.environ['HOME'], "datasets", "FEFF_data_June7")
 
@@ -63,15 +72,17 @@ def extract_sites_o6_s5_t4(search_pattern,species, transition, path=None,
     s5_data = []
     o6_data = []
 
-    forbidden = [".DS_Store", "CONTCAR"]
+    forbidden = [".DS_Store", "CONTCAR", "collection.pkl"]
     correct_string = str(species) + "-" + str(transition)
 
     # for cell (e.g. mp-390) in the desired data directory
     os_list_directory = os.listdir(path)
     N_os_list_directory = len(os_list_directory)
 
-    for ii, cell in enumerate(os_list_directory):
-        
+    for ii in tqdm(range(N_os_list_directory)):
+
+        cell = os_list_directory[ii]
+
         if verbose == 1:
             if ii % 100 == 0:
                 print("%i/%i samples analyzed" % (ii, N_os_list_directory))
@@ -117,8 +128,13 @@ def extract_sites_o6_s5_t4(search_pattern,species, transition, path=None,
                                 # ensure we end up with content to analyze 
                                 # if not pass it
                                 try:
-                                    cesym = get_cesym(lgf, structure, 
+                                    save_stdout = sys.stdout
+                                    sys.stdout = open('.trash', 'w')
+                                    lgf = LocalGeometryFinder()
+                                    cesym = get_cesym(lgf,
+                                                      structure,
                                                       content.structure[1])
+                                    sys.stdout = save_stdout
                                 except IndexError:
                                     pass_sample = True
 
@@ -126,17 +142,17 @@ def extract_sites_o6_s5_t4(search_pattern,species, transition, path=None,
                                     pass
                                 elif cesym[0] == "T:4":
                                     t4_data.append([cell, cell_counter,
-                                                   deepcopy(content), cesym])
+                                                    deepcopy(content), cesym])
                                     cell_counter += 1
                                     total_counter += 1
                                 elif cesym[0] == "S:5":
                                     s5_data.append([cell, cell_counter,
-                                                   deepcopy(content), cesym])
+                                                    deepcopy(content), cesym])
                                     cell_counter += 1
                                     total_counter += 1
                                 elif cesym[0] == "O:6":
                                     o6_data.append([cell, cell_counter,
-                                                   deepcopy(content), cesym])
+                                                    deepcopy(content), cesym])
                                     cell_counter += 1
                                     total_counter += 1
                             except FileNotFoundError:
