@@ -1,20 +1,33 @@
+#!/usr/bin/env python3
+
 # -*- coding: iso-8859-1 -*-
 # coding: utf-8
 
-"""
-This provides core functions needed by t4iss
-"""
+# pylint: disable=C0103
+# pylint: disable=C0200
+# pylint: disable=R0912
+# pylint: disable=R0902
+# pylint: disable=R0903
+# pylint: disable=R0913
+# pylint: disable=R0914
+# pylint: disable=R0915
+
+"""This provides core functions needed by t4iss."""
 
 __author__ = "Mehmet Topsakal"
 __email__ = "metokal@gmail.com"
 __status__ = "Development"
 __date__ = "March 20, 2018"
 
+import os
+# from os.path import join
 
+# import sys
+# import shutil
+# import subprocess
+import pickle
 
 import numpy as np
-import os,sys,shutil,subprocess,pickle
-from os.path import join
 
 from pymatgen.analysis.local_env import VoronoiNN
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
@@ -24,33 +37,32 @@ from mpl_toolkits.axes_grid1.anchored_artists import AnchoredDrawingArea
 from matplotlib.patches import Circle
 from matplotlib.offsetbox import AnchoredText
 
-from scipy.ndimage.filters import gaussian_filter1d
+# from scipy.ndimage.filters import gaussian_filter1d
 from scipy import interpolate
 from scipy import signal
+from scipy.stats import rankdata
 
-from t4iss.defaults import t4iss_defaults
-
+# from t4iss.defaults import t4iss_defaults
 from t4iss.PT import get_c
 
 
-
-from scipy.stats import rankdata
-
-
-
-
-#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++            
 class mXANES:
-    
-    def __init__(self, data=None, data_loadfrom=None, srange=None, structure=None, vcncutoff=5.0, ca=None, Eonset=None, 
+    # TODO: docstring
+
+    def __init__(self, data=None, data_loadfrom=None, srange=None,
+                 structure=None, vcncutoff=5.0, ca=None, Eonset=None,
                  xanesid=None, source=None, edge=None, multiplicity=1):
         
         super(mXANES, self).__init__()
 
+        # these are class-variables that were prior not defined in __init__
+        self.env = None
+        self.rank = None
+
         if data is None:
             if data_loadfrom:
-                data = np.loadtxt(data_loadfrom, unpack=True, comments='#', skiprows=0)
+                data = np.loadtxt(data_loadfrom, unpack=True, comments='#', 
+                                  skiprows=0)
                 self.E0 = np.array(data[0])
                 self.I0 = np.array(data[1])                
             else:
@@ -99,16 +111,17 @@ class mXANES:
         if structure:
             try:               
                 self.ca = structure[0][structure[1]].species_string            
-                nnfinder = VoronoiNN(cutoff=vcncutoff,allow_pathological=True)
-                vcn = nnfinder.get_cn(structure[0], structure[1], use_weights=True)
+                nnfinder = VoronoiNN(cutoff=vcncutoff, allow_pathological=True)
+                vcn = nnfinder.get_cn(structure[0], structure[1],
+                                      use_weights=True)
                 self.vcn = vcn
-                self.structure = [structure[0],structure[1],vcn]
+                self.structure = [structure[0], structure[1],vcn]
             except Exception as exc:
                 print(exc)
-                self.structure = [structure[0],structure[1],[]]
+                self.structure = [structure[0], structure[1],[]]
                 self.vcn = []
         else:
-            self.structure = [[],[],[]] 
+            self.structure = [[], [], []] 
             self.vcn = []
         
         self.peaks = []
@@ -118,26 +131,35 @@ class mXANES:
         self.I = None
         
                                             
-    def Interpolate(self,iterprange,stepsize=0.1):               
+    def Interpolate(self, iterprange, stepsize=0.1):
+        # TODO: docstring
+
+        # left padding
         if self.E[0] > iterprange[0]:
-            # left padding
             npts = int((self.E[0]-iterprange[0])/stepsize)+1
-            x_patch = np.linspace(iterprange[0],self.E[0]-stepsize,npts)
-            y_patch=np.empty(len(x_patch)); y_patch.fill(self.I[0])
-            self.E = np.concatenate((x_patch,self.E.T), axis=0)
-            self.I = np.concatenate((y_patch,self.I.T), axis=0)                       
+            x_patch = np.linspace(iterprange[0], self.E[0]-stepsize, npts)
+            y_patch = np.empty(len(x_patch))
+            y_patch.fill(self.I[0])
+            self.E = np.concatenate((x_patch, self.E.T), axis=0)
+            self.I = np.concatenate((y_patch, self.I.T), axis=0)
+
+        # right padding
         if self.E[-1] < iterprange[1]:
-            # right padding            
             npts = int((iterprange[1]-self.E[-1])/stepsize)+2
-            x_patch = np.linspace(self.E[-1],iterprange[1],npts)
-            y_patch=np.empty(len(x_patch)); y_patch.fill(self.I[-1])
-            self.E = np.concatenate((self.E.T,x_patch), axis=0)
-            self.I = np.concatenate((self.I.T,y_patch), axis=0)             
-        f = interpolate.interp1d(self.E,self.I,kind='linear')
-        self.E = np.linspace(iterprange[0],iterprange[1], int((iterprange[1]-iterprange[0])/stepsize)+1  )      
+            x_patch = np.linspace(self.E[-1], iterprange[1], npts)
+            y_patch = np.empty(len(x_patch))
+            y_patch.fill(self.I[-1])
+            self.E = np.concatenate((self.E.T, x_patch), axis=0)
+            self.I = np.concatenate((self.I.T, y_patch), axis=0)
+
+        f = interpolate.interp1d(self.E, self.I, kind='linear')
+        self.E = np.linspace(iterprange[0], iterprange[1],
+                             int((iterprange[1]-iterprange[0])/stepsize)+1)
         self.I = f(self.E) 
-                
-    def FindPeaks(self,xin=None,yin=None,srangep=None):        
+
+    def FindPeaks(self, xin=None, yin=None, srangep=None):
+        # TODO: docstring
+
         if (xin is None) or (yin is None):
             xsearch = self.E0
             ysearch = self.I0
@@ -146,18 +168,23 @@ class mXANES:
             ysearch = yin                       
         if srangep:
             sel = (xsearch >= srangep[0]) & (xsearch <= srangep[1])
-            xsearch = xsearch[sel]; ysearch = ysearch[sel]        
-        ipeaks = argrelextrema(ysearch, np.greater)[0]         
+            xsearch = xsearch[sel]
+            ysearch = ysearchƒ[sel]
+        ipeaks = argrelextrema(ysearch, np.greater)[0]
         peaks = []
         for i in ipeaks:
-            peaks.append([xsearch[i],ysearch[i]])
+            peaks.append([xsearch[i], ysearch[i]])
         self.peaks = peaks        
         return peaks
   
-    def yscale_by(self,yscale):
+    def yscale_by(self, yscale):
+        # TODO: docstring
+
         self.I = self.I*yscale
         
-    def normalize_to(self,nstr):
+    def normalize_to(self, nstr):
+        # TODO: docstring
+
         if nstr == 'max':            
             self.I = self.I/max(self.I)
         elif nstr == 'tail':
@@ -165,9 +192,10 @@ class mXANES:
         else:
             self.I = self.I  
 
-
             
-    def broaden0(self, g_sigma=None,g_fwhm=None, l_gamma=None,l_fwhm=None, lvl=None):
+    def broaden0(self, g_sigma=None, g_fwhm=None, l_gamma=None, l_fwhm=None,
+                 lvl=None):
+        # TODO: docstring
          
         if g_sigma:
             self.E0, self.I0 = mconv(self.E0, self.I0).Gaussian(sigma=g_sigma)
@@ -181,16 +209,22 @@ class mXANES:
                           
         if lvl:            
             if len(lvl) == 1:
-                self.E0, self.I0 = mconv(self.E0, self.I0).LorentzianVL(A=lvl[0],B=None,offset=None)
+                self.E0, self.I0 = mconv(self.E0, self.I0).\
+                                   LorentzianVL(A=lvl[0], B=None, offset=None)
             elif len(lvl) == 2:
-                self.E0, self.I0 = mconv(self.E0, self.I0).LorentzianVL(A=lvl[0],B=lvl[1],offset=None)               
+                self.E0, self.I0 = mconv(self.E0, self.I0).\
+                                   LorentzianVL(A=lvl[0], B=lvl[1],
+                                                offset=None)               
             else:
-                self.E0, self.I0 = mconv(self.E0, self.I0).LorentzianVL(A=lvl[0],B=lvl[1],offset=lvl[2])  
-
+                self.E0, self.I0 = mconv(self.E0, self.I0).\
+                                   LorentzianVL(A=lvl[0], B=lvl[1],
+                                                offset=lvl[2])  
 
  
-    def transform(self,srange=None,irange=None,x0shift=False,y0shift=False,
-                  normalize='max',xshift=None,std=False):        
+    def transform(self, irange=None, x0shift=False,
+                  y0shift=False, normalize='max', xshift=None, std=False):
+        # TODO: docstring
+
         self.E = self.E0.copy()
         self.I = self.I0.copy()        
         if x0shift:
@@ -212,71 +246,85 @@ class mXANES:
             
         if std:
             self.I = (self.I-np.mean(self.I))/np.std(self.I)
-                        
-        self.rank = rankdata(self.I,method='average') / len(self.I)
+
+        self.rank = rankdata(self.I, method='average') / len(self.I)
             
-            
-    def get_nn(self, nnradius=10.01, axin=None, yshift=0, ms=9, lp='k-',ts=0, text_off=False, labels_off=False, atoms_off=False):
-               
+
+    def get_nn(self, nnradius=10.01, axin=None, yshift=0, ms=9, lp='k-', ts=0,
+               text_off=False, labels_off=False, atoms_off=False):
+        # TODO: docstring
+
         if self.structure:
-            env = self.structure[0].get_sites_in_sphere(self.structure[0][self.structure[1]].coords,nnradius)
-            def getKey(item): return item[1]
-            self.env = sorted(env, key=getKey)            
+            env = self.structure[0].\
+                  get_sites_in_sphere(self.structure[0][self.structure[1]].\
+                  coords, nnradius)
+
+            def getKey(item):
+                # TODO: docstring
+
+                return item[1]
+
+            self.env = sorted(env, key=getKey)
             ss = []
             for i in env:
                 ss.append(i[0].specie.name)
-            self.species = list(set(ss)) 
-            
+            self.species = list(set(ss))
             
             if not atoms_off:
                 atext = []
                 cs = []
                 c = 0
                 s = 10
-                for i in self.species:  
-                    ada = AnchoredDrawingArea(s*3, (len(self.species))*s, 0, 0, loc=2, pad=0., frameon=False)            
-                    cs.append(Circle((s*2, c*s), 3, fc=get_c(i))); atext.append(i); c += 1
+                for i in self.species:
+                    ada = AnchoredDrawingArea(s*3, (len(self.species))*s, 0,
+                                              0, loc=2, pad=0., frameon=False)
+                    cs.append(Circle((s*2, c*s), 3, fc=get_c(i)))
+                    atext.append(i)
+                    c += 1
                 
-                at = AnchoredText('\n'.join(atext[::-1]),
-                           loc=2, prop=dict(size=s), frameon=False, bbox_to_anchor=(0., 1.),
-                           bbox_transform=axin.transAxes)  
+                at = AnchoredText('\n'.join(atext[::-1]), loc=2, 
+                                  prop=dict(size=s), frameon=False,
+                                  bbox_to_anchor=(0., 1.),
+                                  bbox_transform=axin.transAxes)
                 for i in cs:
                     ada.drawing_area.add_artist(i)
                 ada.drawing_area.add_artist(at)               
                 axin.add_artist(ada)
 
-            if axin:
-                                
+            if axin:    
                 if self.vcn:
-                    astr = 'mult.={:d}\nvcn={:04.2f}'.format(self.multiplicity,self.vcn)
+                    astr = 'mult.={:d}\nvcn={:04.2f}'.\
+                           format(self.multiplicity, self.vcn)
                 else:
                     astr = 'mult.={:d}\nvcn=na'.format(self.multiplicity)
                     
                 if not text_off:
-                    axin.annotate(astr,(-3,ts+yshift-0.1), fontsize=10, weight='bold')
+                    axin.annotate(astr, (-3, ts+yshift-0.1), fontsize=10,
+                                  weight='bold')
 
-                ss = []; ds = []
+                ss = []
+                ds = []
                 for i in self.env:
                     ss.append(i[0].specie.name)
                     ds.append(i[1])
-                ds = np.array(ds,np.float)
+                ds = np.array(ds, np.float)
                 
-                axin.plot(yshift+ds[0:21],lp)
+                axin.plot(yshift+ds[0:21], lp)
                 
-
-                for i,d in enumerate(ds[0:21]):
+                for i, d in enumerate(ds[0:21]):
                     c = get_c(ss[i])
-                    axin.plot( i, yshift+d, 'o', color=c, ms=ms, alpha=0.8 )
+                    axin.plot(i, yshift+d, 'o', color=c, ms=ms, alpha=0.8)
 
-                axin.set_xticks(list(range(1,21)))
+                axin.set_xticks(list(range(1, 21)))
+
                 if text_off:
-                    axin.set_xlim([-0.5,21])
+                    axin.set_xlim([-0.5, 21])
                 else:
-                    axin.set_xlim([-3.5,21])
+                    axin.set_xlim([-3.5, 21])
                     
                 if not labels_off:
                     axin.set_xlabel('Neighbour index #');
-                    axin.set_ylabel('Distance to absorbing atom ($\AA$)')  
+                    axin.set_ylabel('Distance to absorbing atom ($\AA$)')
                 else:
                     axin.set_xticklabels([])
         else:
@@ -285,31 +333,16 @@ class mXANES:
                 print('nn info is not available.')
         
         return env
-    
-
-    
-    
-       
-        
-
-
-
-
-
-
-
-
-
-
-
 
 
 class mconv:
-    '''
-    Does convolution with Gaussian or Lorentzian windows
-    '''
+    # TODO: improve docstring
+    '''Does convolution with Gaussian or Lorentzian windows.'''
      
     def __init__(self, datax, datay):
+
+        # define self-variables that weren't initialized prior in __init__
+        self.sigma = None
          
         self.datax = datax
         self.datay = datay
@@ -317,54 +350,63 @@ class mconv:
         self.NPoints = len(datax)
         self.X = np.array(datax)
  
- 
-             
     def w_gaussian(self, M, wsigma, dx):
-        ''' see : https://github.com/scipy/scipy/blob/v0.19.0/scipy/signal/windows.py#L1159-L1219
-        M should be odd number'''
-        if wsigma <=0 : wsigma = 0.00001
+        # TODO: improve docstring
+        ''' see : https://github.com/scipy/scipy/blob/v0.19.0/scipy/signal
+                  /windows.py#L1159-L1219
+        M should be odd number.'''
+
+        if wsigma <= 0:
+            wsigma = 0.00001
+
         wsigma = wsigma/dx
         n = np.arange(0, M) - (M - 1.0) / 2.0
         wsigma2 = 2 * wsigma * wsigma
-        wg = np.exp(-n ** 2 / wsigma2)    
+        wg = np.exp(-n**2/wsigma2)
         return wg
  
     def w_lorentzian(self, M, wgamma, dx):
-        ''' '''
+        # TODO: docstring
+
         wgamma = wgamma/dx
-        if wgamma <=0 : wgamma = 0.00001
-        n = np.arange(0, M) - (M - 1.0) / 2.0
-        wl = 1 / ( ((2*n)/wgamma)**2 + 1  )    
+        if wgamma <= 0:
+            wgamma = 0.00001
+
+        n = np.arange(0, M)-(M-1.0)/2.0
+        wl = 1.0/(((2*n)/wgamma)**2 + 1)
         return wl             
             
          
-    def Gaussian(self,sigma=None,fwhm=None,saveto=None):
-         
-        if fwhm:
-            if sigma:
-                print('ignoring input sigma')
+    def Gaussian(self, sigma=None, fwhm=None, saveto=None):
+        # TODO: doctstring
+
+        if fwhm and sigma:
+            print('ignoring input sigma')
         elif sigma:
             fwhm = sigma * np.sqrt(8 * np.log(2))
         else: 
             raise ValueError('sigma/fwhm was not set....')  
-            
+
         self.sigma = fwhm/np.sqrt(8 * np.log(2))   
          
-        M=101
-        diff = [self.datax[i+1] - self.datax[i] for i in range(len(self.datax)-1)]; dx= np.sum(diff)/len(self.datax) 
+        M = 101
+        diff = [self.datax[i+1] - self.datax[i] \
+                for i in range(len(self.datax)-1)]
+        dx= np.sum(diff)/len(self.datax) 
         win = self.w_gaussian(M, self.sigma, dx)
-        out = signal.convolve(self.datay, win, mode='same') / sum(win)
+        out = signal.convolve(self.datay, win, mode='same')/sum(win)
         
         if saveto:
             if fmt is None:
-                fmt="%18.6e %18.6e"               
-            of = np.column_stack( (self.X, out) )
-            np.savetxt(str(saveto), of, delimiter=" ", fmt=fmt )       
+                fmt="%18.6e %18.6e"
+            of = np.column_stack((self.X, out))
+            np.savetxt(str(saveto), of, delimiter=" ", fmt=fmt)
              
         return [self.X, out]
              
  
-    def Lorentzian(self,gamma=None,fwhm=None,saveto=None,M=None):
+    def Lorentzian(self, gamma=None, fwhm=None, saveto=None, M=None):
+        # TODO: docstring
         # in Lorentzian fwhm is equal to gamma
          
         if fwhm:
@@ -377,107 +419,103 @@ class mconv:
              
         self.gamma = fwhm 
          
-        if M is None: M=1001
-        diff = [self.datax[i+1] - self.datax[i] for i in range(len(self.datax)-1)]; dx= np.sum(diff)/len(self.datax) 
+        if M is None:
+            M = 1001
+        diff = [self.datax[i+1] - self.datax[i] \
+                for i in range(len(self.datax)-1)]
+        dx= np.sum(diff)/len(self.datax)
         win = self.w_lorentzian(M, self.gamma, dx)
-        out = signal.convolve(self.datay, win, mode='same') / sum(win)
+        out = signal.convolve(self.datay, win, mode='same')/sum(win)
  
-             
         if saveto:
             if fmt is None:
-                fmt="%18.6e %18.6e"               
-            of = np.column_stack( (self.X, out) )
-            np.savetxt(str(saveto), of, delimiter=" ", fmt=fmt )       
+                fmt = "%18.6e %18.6e"
+            of = np.column_stack((self.X, out))
+            np.savetxt(str(saveto), of, delimiter=" ", fmt=fmt)
              
         return [self.X, out]    
      
      
-    def LorentzianVL(self,saveto=None,fmt=None,M=None,A=None,B=None,offset=None):
-        # gamma = A(x-offset) + B   
+    def LorentzianVL(self, saveto=None, fmt=None, M=None, A=None, B=None,
+                     offset=None):
+        # TODO: docstring
+        # gamma = A(x-offset) + B
          
-        if A is None: A=0.1
-        if B is None: B=0          
-        if offset is None: offset=self.datax[0]  
+        if A is None:
+            A = 0.1
+        if B is None:
+            B = 0
+        if offset is None:
+            offset = self.datax[0]
          
         gammas = []    
-        for i,d in enumerate(self.datax):
-            g = max(0,A*(d-offset)) + B
+        for i, d in enumerate(self.datax):
+            g = max(0, A*(d-offset)) + B
             gammas.append(g)
    
-        if M is None: M=1001  
-        diff = [self.datax[i+1] - self.datax[i] for i in range(len(self.datax)-1)]; dx= np.sum(diff)/len(self.datax) 
+        if M is None:
+            M = 1001
+        diff = [self.datax[i+1] - self.datax[i] \
+                for i in range(len(self.datax)-1)]
+        dx = np.sum(diff)/len(self.datax) 
         out = np.zeros(self.NPoints)
          
                  
-        for i, [gg, x0, y0] in enumerate(zip(gammas,self.datax,self.datay)):
+        for i, [gg, __, __] in enumerate(zip(gammas, self.datax, self.datay)):
             win = self.w_lorentzian(M, gg, dx)
-            c = signal.convolve(self.datay, win, mode='same') / sum(win)
+            c = signal.convolve(self.datay, win, mode='same')/sum(win)
             out[i] = c[i]
                          
         if saveto:
             if fmt is None:
-                fmt="%18.6e %18.6e"               
-            of = np.column_stack( (self.X, out) )
-            np.savetxt(str(saveto), of, delimiter=" ", fmt=fmt )           
+                fmt = "%18.6e %18.6e"
+            of = np.column_stack((self.X, out))
+            np.savetxt(str(saveto), of, delimiter=" ", fmt=fmt)
              
-        #return [self.X, out], [self.datax, gammas]   
+        #return [self.X, out], [self.datax, gammas]  
         return [self.X, out]
  
      
      
-    def LorentzianVE2(self,saveto=None,fmt=None,M=None,offset=None):
+    def LorentzianVE2(self, saveto=None, fmt=None, M=None, offset=None):
+        # TODO: docstring
         # gamma = (x-offset)^2 + B   
          
-        if A is None: A=0.1
-        if B is None: B=0          
-        if offset is None: offset=self.datax[0]  
+        A = 0.1
+        B = 0
+        if offset is None:
+            offset = self.datax[0]  
          
         gammas = []    
-        for i,d in enumerate(self.datax):
-            g = max(0,A*(d-offset)) + B
+        for i, d in enumerate(self.datax):
+            g = max(0, A*(d-offset)) + B
             gammas.append(g)
    
-        if M is None: M=1001  
-        diff = [self.datax[i+1] - self.datax[i] for i in range(len(self.datax)-1)]; dx= np.sum(diff)/len(self.datax) 
+        if M is None:
+            M = 1001  
+        diff = [self.datax[i+1] - self.datax[i] \
+                for i in range(len(self.datax)-1)]
+        dx = np.sum(diff)/len(self.datax)
         out = np.zeros(self.NPoints)
          
                  
-        for i, [gg, x0, y0] in enumerate(zip(gammas,self.datax,self.datay)):
+        for i, [gg, __, __] in enumerate(zip(gammas, self.datax, self.datay)):
             win = self.w_lorentzian(M, gg, dx)
-            c = signal.convolve(self.datay, win, mode='same') / sum(win)
+            c = signal.convolve(self.datay, win, mode='same')/sum(win)
             out[i] = c[i]
                          
         if saveto:
             if fmt is None:
-                fmt="%18.6e %18.6e"               
-            of = np.column_stack( (self.X, out) )
-            np.savetxt(str(saveto), of, delimiter=" ", fmt=fmt )           
+                fmt = "%18.6e %18.6e"
+            of = np.column_stack((self.X, out))
+            np.savetxt(str(saveto), of, delimiter=" ", fmt=fmt)
              
         #return [self.X, out], [self.datax, gammas]   
         return [self.X, out]
 
 
-
-
-
-
-
-            
-            
-
-
-
-
-
-
-
-
-
-
-
-#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++  
 class xanes_collection:
+    # TODO: docstring
 
     def __init__(self, absorption_specie, collection_name='not_set'):
         
@@ -491,6 +529,7 @@ class xanes_collection:
         
         
     def build(self, xanes_list):
+        # TODO: docstring
         
         collection = []
         for i in xanes_list:
@@ -514,20 +553,14 @@ class xanes_collection:
         self.site_spectra = site_spectra
         
 
+def read_xanes(path, absorption_specie, order='eof', skip_missing=False,
+               symprec=0.01, ang_tol=5):
+    # TODO: docstring
 
-
-
-#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ 
-# 
-def read_xanes(path,absorption_specie,order='eof',skip_missing=False,symprec=0.01,ang_tol=5):
-               
     here = os.getcwd() 
 
     if os.path.isdir(path):
-        
         os.chdir(path)
-
         struct = mg.Structure.from_file("CONTCAR")
         finder = SpacegroupAnalyzer(struct,symprec,ang_tol)
         struct = finder.get_symmetrized_structure()
@@ -539,21 +572,27 @@ def read_xanes(path,absorption_specie,order='eof',skip_missing=False,symprec=0.0
         if absorption_specie not in s:
             if skip_missing:
                 os.chdir(here)                
-                print('This structure does not have '+absorption_specie+' in it. Skipping...')
-                return [[],[]] 
+                print('This structure does not have' + absorption_specie
+                      + 'in it. Skipping...')
+                return [[], []] 
             else:
                 os.chdir(here)                
-                raise ValueError('This structure does not have '+absorption_specie+' element in it. Please check...')
+                raise ValueError('This structure does not have'
+                                 + absorption_specie
+                                 + 'element in it. Please check...')
 
         xanes = []
-        for i,s in enumerate(sites):
+        for i, s in enumerate(sites):
             if s[0].species_string is absorption_specie:   
                 
-                fe = 'exciting_{:03d}_{}-K'.format(indices[i][0]+1,absorption_specie) 
-                fo = 'ocean_{:03d}_{}-K'.format(indices[i][0]+1,absorption_specie)                     
-                ff = 'feff_{:03d}_{}-K'.format(indices[i][0]+1,absorption_specie)  
+                fe = 'exciting_{:03d}_{}-K'.format(indices[i][0]+1,
+                                                   absorption_specie)
+                fo = 'ocean_{:03d}_{}-K'.format(indices[i][0]+1,
+                                                absorption_specie)
+                ff = 'feff_{:03d}_{}-K'.format(indices[i][0]+1,
+                                               absorption_specie)
                 
-                if order is 'eo':                                   
+                if order is 'eo':
                     if os.path.isdir(fe):
                         os.chdir(fe)  
                         pload = pickle.load(open('xanes.pkl', 'rb'))
@@ -566,14 +605,16 @@ def read_xanes(path,absorption_specie,order='eof',skip_missing=False,symprec=0.0
                         os.chdir('..')                         
                     else:
                         if skip_missing:
-                            print(fe+' is not available in '+path+'. Skipping...')
+                            print(fe + 'is not available in' 
+                                  + path + '. Skipping...')
                             os.chdir(here)
-                            return [[],[]] 
+                            return [[], []] 
                         else:
                             os.chdir(here)                        
-                            raise FileNotFoundError(fe+' is not available in '+path)                 
+                            raise FileNotFoundError(fe + 'is not available in'
+                                                    + path)                 
 
-                if order is 'oe':                                    
+                if order is 'oe':
                     if os.path.isdir(fo):
                         os.chdir(fo)  
                         pload = pickle.load(open('xanes.pkl', 'rb'))
@@ -586,14 +627,16 @@ def read_xanes(path,absorption_specie,order='eof',skip_missing=False,symprec=0.0
                         os.chdir('..')                         
                     else:
                         if skip_missing:
-                            print(fo+' is not available in '+path+'. Skipping...')
+                            print(fo + 'is not available in' + path 
+                                  + '. Skipping...')
                             os.chdir(here)
-                            return [[],[]] 
+                            return [[], []] 
                         else:
                             os.chdir(here)                        
-                            raise FileNotFoundError(fo+' is not available in '+path)  
+                            raise FileNotFoundError(fo + 'is not available in'
+                                                    + path)  
                                                         
-                if order is 'eof':                                   
+                if order is 'eof':
                     if os.path.isdir(fe):
                         os.chdir(fe)  
                         pload = pickle.load(open('xanes.pkl', 'rb'))
@@ -611,14 +654,16 @@ def read_xanes(path,absorption_specie,order='eof',skip_missing=False,symprec=0.0
                         os.chdir('..')                           
                     else:
                         if skip_missing:
-                            print(fe+' is not available in '+path+'. Skipping...')
+                            print(fe + 'is not available in' + path
+                                  + '. Skipping...')
                             os.chdir(here)
-                            return [[],[]] 
+                            return [[], []] 
                         else:
                             os.chdir(here)                        
-                            raise FileNotFoundError(fe+' is not available in '+path)                                      
+                            raise FileNotFoundError(fe + 'is not available in'
+                                                    + path)                                      
 
-                if order is 'f':                                    
+                if order is 'f':
                     if os.path.isdir(ff):
                         os.chdir(ff)  
                         pload = pickle.load(open('xanes.pkl', 'rb'))
@@ -626,14 +671,16 @@ def read_xanes(path,absorption_specie,order='eof',skip_missing=False,symprec=0.0
                         os.chdir('..')                    
                     else:
                         if skip_missing:
-                            print(ff+' is not available in '+path+'. Skipping...')
+                            print(ff + 'is not available in' + path
+                                  + '. Skipping...')
                             os.chdir(here)
-                            return [[],[]] 
+                            return [[], []] 
                         else:
                             os.chdir(here)                        
-                            raise FileNotFoundError(ff+' is not available in '+path)                              
+                            raise FileNotFoundError(ff + 'is not available in'
+                                                    + path)                              
 
-                if order is 'o':                                    
+                if order is 'o':
                     if os.path.isdir(fo):
                         os.chdir(fo)  
                         pload = pickle.load(open('xanes.pkl', 'rb'))
@@ -641,14 +688,16 @@ def read_xanes(path,absorption_specie,order='eof',skip_missing=False,symprec=0.0
                         os.chdir('..')                    
                     else:
                         if skip_missing:
-                            print(fo+' is not available in '+path+'. Skipping...')
+                            print(fo + 'is not available in' + path
+                                  + '. Skipping...')
                             os.chdir(here)
-                            return [[],[]] 
+                            return [[], []] 
                         else:
                             os.chdir(here)                        
-                            raise FileNotFoundError(fo+' is not available in '+path)                                
+                            raise FileNotFoundError(fo + 'is not available in'
+                                                    + path)
 
-                if order is 'e':                                    
+                if order is 'e':
                     if os.path.isdir(fe):
                         os.chdir(fe)  
                         pload = pickle.load(open('xanes.pkl', 'rb'))
@@ -656,55 +705,65 @@ def read_xanes(path,absorption_specie,order='eof',skip_missing=False,symprec=0.0
                         os.chdir('..')                    
                     else:
                         if skip_missing:
-                            print(fe+' is not available in '+path+'. Skipping...')
+                            print(fe + 'is not available in' + path
+                                  + '. Skipping...')
                             os.chdir(here)
-                            return [[],[]] 
+                            return [[], []] 
                         else:
                             os.chdir(here)                        
-                            raise FileNotFoundError(fe+' is not available in '+path)                             
+                            raise FileNotFoundError(fe + 'is not available in'
+                                                    + path)
                         
 
         # get E limits
         minmaxs = []
         for i in xanes:
-            minmaxs.append([min(i.E0),max(i.E0)])
+            minmaxs.append([min(i.E0), max(i.E0)])
         minmaxs = np.array(minmaxs)    
-        irange = [max(minmaxs[:,0]),min(minmaxs[:,1])]   
-        e_int = np.linspace(irange[0],irange[1], int((irange[1]-irange[0])/0.1)+1  )
+        irange = [max(minmaxs[:, 0]), min(minmaxs[:, 1])]   
+        e_int = np.linspace(irange[0], irange[1],
+                            int((irange[1]-irange[0])/0.1)+1)
 
         ave_xanes = e_int*0
         ave_vcn = 0
         site_xanes = []
         counter = 0
         for i in xanes:
-            i.transform(irange=irange,normalize=None,y0shift=None)
+            i.transform(irange=irange, normalize=None, y0shift=None)
             ave_xanes += i.I*i.multiplicity
             site_onset = i.Eonset
-            site_xanes.append(mXANES(data=[i.E,i.I],structure=i.structure,xanesid=i.xanesid,source=i.source,
-                                     Eonset=site_onset, edge=i.edge,multiplicity=i.multiplicity)) 
+            site_xanes.append(mXANES(data=[i.E, i.I], structure=i.structure,
+                                     xanesid=i.xanesid, source=i.source,
+                                     Eonset=site_onset,
+                                     edge=i.edge,
+                                     multiplicity=i.multiplicity)) 
             if i.vcn:
                 ave_vcn += i.vcn*i.multiplicity 
             else:
                 try:
-                    nnfinder = VoronoiNN(cutoff=10,allow_pathological=True)
+                    nnfinder = VoronoiNN(cutoff=10, allow_pathological=True)
                     print(i.structure)
-                    vcn = nnfinder.get_cn(i.structure[0], i.structure[1], use_weights=True)
-                    ave_vcn += i.vcn*i.multiplicity 
+                    # vcn = nnfinder.get_cn(i.structure[0], i.structure[1],
+                    #                       use_weights=True)
+                    ave_vcn += i.vcn*i.multiplicity
                 except Exception as exc:
                     print(exc)
-                    print('warning: vcn info is missing for site. ave_vnc is not correct. ')
+                    print('warning: vcn info is missing for site. '
+                          'ave_vnc is not correct. ')
             counter += i.multiplicity
         ave_xanes = ave_xanes/counter
         ave_vcn = ave_vcn/counter
-        ave_xanes = mXANES(data=[e_int,ave_xanes],Eonset=site_onset,structure=[struct,-1,ave_vcn],xanesid=i.xanesid,source=i.source,edge=i.edge)   
+        ave_xanes = mXANES(data=[e_int, ave_xanes], Eonset=site_onset,
+                           structure=[struct, -1, ave_vcn], xanesid=i.xanesid,
+                           source=i.source, edge=i.edge)
         os.chdir(here)
-        return [ave_xanes,site_xanes]
+        return [ave_xanes, site_xanes]
     
     else:
         if skip_missing:
             os.chdir(here)             
-            print(path+' is not available. Skipping...')
-            return [[],[]]       
+            print(path + 'is not available. Skipping...')
+            return [[], []]
         else:
             os.chdir(here)            
             raise FileNotFoundError(path+' is not available.')
