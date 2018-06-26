@@ -1,7 +1,13 @@
-from pymatgen import Structure
-from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-from pymatgen.analysis.chemenv.coordination_environments\
-     .coordination_geometry_finder import LocalGeometryFinder
+#!/usr/bin/env python3
+
+# pylint: disable=C0103
+
+"""Gets coordination environment and corresponding CSM."""
+
+# from pymatgen import Structure
+# from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+# from pymatgen.analysis.chemenv.coordination_environments\
+#     .coordination_geometry_finder import LocalGeometryFinder
 from pymatgen.analysis.chemenv.coordination_environments\
      .chemenv_strategies import MultiWeightsChemenvStrategy
 from pymatgen.analysis.chemenv.coordination_environments\
@@ -9,6 +15,7 @@ from pymatgen.analysis.chemenv.coordination_environments\
 
 
 def get_cesym(lgf, structure, site):
+    """See module docstring."""
 
     # doc: http://pymatgen.org/_modules/pymatgen/analysis/chemenv/
     #      coordination_environments/coordination_geometry_finder.html
@@ -38,10 +45,3 @@ def get_cesym(lgf, structure, site):
     # the similarity is the highest, that is, for which the CSM is the lowest."
     # in this case, it looks like O:6 (octahedral?)
     return [coor[site][0]['ce_symbol'], coor[site][0]['csm']]
-
-
-def main():
-    pass
-
-if __name__ == '__main__':
-    main()
