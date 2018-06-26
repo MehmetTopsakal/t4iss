@@ -5,7 +5,7 @@ import numpy as np
 from pymatgen.analysis.local_env import VoronoiNN
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 import pymatgen as mg
-from .core import mXANES
+from t4iss.core import mXANES
 
 def read_xanes(path, absorption_specie, order='eof', skip_missing=False, 
                symprec=0.01,ang_tol=5):

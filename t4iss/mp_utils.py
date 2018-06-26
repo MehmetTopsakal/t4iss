@@ -14,8 +14,8 @@ import os
 import numpy as np
 import pickle
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-from . import t4iss_defaults
-from .core import mXANES
+from t4iss.defaults import t4iss_defaults
+from t4iss.core import mXANES
 
 
 # This searches for structures in MP database.
@@ -146,33 +146,108 @@ def download_xanes_from_MP(mpr, mpid, absorption_specie,
                         missing.append([mpid,i])
             return missing
     
-    
 
-    #structure = mpr.get_structure_by_material_id(i[0],final=True)
-    #structure = SpacegroupAnalyzer(structure).get_symmetrized_structure()
-##     structure.to(fmt='poscar',filename='CONTCAR') # this doesn't work
+def download_xanes_from_MP_old(mpr, mpid, absorption_specie, download_to=None):
+    import numpy as np
 
-    #cf=open('CONTCAR',"w+") 
-    #cf.write('symmetrized structure\n')
-    #cf.write('1.0\n')
-    #cf.write('%11.6f %11.6f %11.6f\n'%(structure_sym.lattice.matrix[0][0],structure_sym.lattice.matrix[0][1],structure_sym.lattice.matrix[0][2]))
-    #cf.write('%11.6f %11.6f %11.6f\n'%(structure_sym.lattice.matrix[1][0],structure_sym.lattice.matrix[1][1],structure_sym.lattice.matrix[1][2]))
-    #cf.write('%11.6f %11.6f %11.6f\n'%(structure_sym.lattice.matrix[2][0],structure_sym.lattice.matrix[2][1],structure_sym.lattice.matrix[2][2])) 
-    
-    #for i in structure_sym.types_of_specie:
-        #cf.write(i.symbol+' ')
-    #cf.write('\n')
+    here = os.getcwd()
+    corrupt_paths = []
 
-    #for i in structure_sym.types_of_specie:
-        #cf.write(str(structure.species.count(i))+' ')
-    #cf.write('\n')  
-    
-    #cf.write('Direct\n')
-    
-    #for i in structure.sites:
-        #cf.write('%8.6f %8.6f %8.6f %s \n'%(i.frac_coords[0],i.frac_coords[1],i.frac_coords[2],i.species_string))
-   
-    #cf.close()
+    if download_to is None:
+        download_to = t4iss_defaults['t4iss_xanes_data']
+
+    data = mpr.get_data(mpid, data_type="feff", prop="xas")
+
+    # check if data from MP is available
+    if data[0]['xas']:
+        species_in_data = []
+        for xas_doc in data[0]['xas']:
+            data_abs_specie = \
+                xas_doc['structure'].species[xas_doc['absorbing_atom']].name
+            species_in_data.append(data_abs_specie)
+        if absorption_specie in species_in_data:
+            available = True
+        else:
+            available = False
+    else:
+        available = False
+
+    if available:
+        data_structure0 = data[0]['xas'][0]["structure"]
+        sites = []
+        for i in data_structure0:
+            sites.append(i.species_string)
+        if absorption_specie not in sites:
+            print('ERROR: '+absorption_specie+' is NOT found in this'
+                  ' structure. Please check....')
+        else:
+            os.chdir(download_to)
+            os.makedirs(mpid, exist_ok=True)
+            os.chdir(mpid)
+            spectra = []
+            for xas_doc in data[0]['xas']:
+                data_abs_specie = \
+                    xas_doc['structure'].\
+                    species[xas_doc['absorbing_atom']].name
+                data_structure = xas_doc["structure"]
+                data_absorption_atom = xas_doc['absorbing_atom']
+                data_edge = xas_doc["edge"]
+                x, y = xas_doc['spectrum']
+                if data_abs_specie == absorption_specie:
+                    finder = SpacegroupAnalyzer(data_structure)
+                    structure = finder.get_symmetrized_structure()
+                    [sites, indices] = structure.equivalent_sites, \
+                        structure.equivalent_indices
+                    for m in indices:
+                        if m[0] == data_absorption_atom:
+                            multiplicity = len(m)
+                            ind = m[0]
+                            
+                    try:     
+                        f = 'feff_{:03d}_{}-{}'.format(ind+1,
+                                                       absorption_specie,
+                                                       data_edge)
+                    except:
+                        print('XANES data for '+mpid+' '
+                              'in Materials Project is corrupt.')
+                        path = os.getcwd() + '/WARNING_CORRUPT'
+                        f = open(path, 'w+')
+                        f.write('data is corrupt')
+                        f.close()
+                        return []
+                        
+                    os.makedirs(f, exist_ok=True)
+                    os.chdir(f)
+                    xanes = mXANES(data=[x, y], structure=[data_structure,
+                                   data_absorption_atom], xanesid=mpid,
+                                   source='from_MP',
+                                   edge=data_edge, multiplicity=multiplicity)
+                    pickle.dump(xanes, open('xanes.pkl', 'wb'))
+                    out = np.column_stack((xanes.E0, xanes.I0))
+                    np.savetxt('xanes.dat', out)
+                    spectra.append(xanes)
+                    os.chdir('..')
+
+
+            data_structure.to(fmt='poscar', filename='CONTCAR')
+            os.chdir(here)
+            print('XANES data was downloaded to '+download_to+'/'+mpid)
+            return [data_structure, spectra]
+    else:
+        print('XANES data for '+mpid+' is not available in Materials Project'
+              ' database...')
+        path = t4iss_defaults['t4iss_xanes_data'] + '/' + str(mpid)
+        try:
+            os.makedirs(path)
+        except:
+            # file exists already, that's ok
+            pass # mp-1071163
+        f = open(path + '/WARNING_MISSING', 'w+')
+        f.write('data is missing')
+        f.close()
+        return []
+
+
 
 
 
