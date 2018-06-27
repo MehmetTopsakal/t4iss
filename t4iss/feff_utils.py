@@ -127,7 +127,7 @@ def make_333_supercell(labels, natoms, lattice, positions):
         supercell.append(pnew)
 
         # +y
-        pnew = [] 
+        pnew = []
         pnew.append(p[s][0] + l[1][0])
         pnew.append(p[s][1] + l[1][1])
         pnew.append(p[s][2] + l[1][2])
@@ -420,7 +420,7 @@ RPATH     -1
     
     f.write("""POTENTIALS
 *   ipot   Z      element   l_scmt   l_fms   stoichiometry
-    0      %(Zca)i     %(Sca)s        -1       -1      0.001 """ % vars())     
+    0      %(Zca)i     %(Sca)s        -1       -1      0.001 """ % vars())
     
     for i in range(len(labels_short)):
         n = (i+1)
@@ -430,7 +430,7 @@ RPATH     -1
         z = d['Atomic no']
         st = natoms[i]
         f.write("""
-    %(n)i      %(z)i     %(s)s        -1       -1      %(st)i """ % vars())        
+    %(n)i      %(z)i     %(s)s        -1       -1      %(st)i """ % vars())
 
     f.write("\n \n")
 
@@ -567,51 +567,49 @@ def read_xanes_feff(mpid, absorption_specie, xanes_data=None,
                     print('warning: vcn info is missing for site. '
                           'ave_vnc is not correct.')
             counter += i.multiplicity
-        ave_xanes = ave_xanes/counter
-        ave_vcn = ave_vcn/counter
+        ave_xanes = ave_xanes / counter
+        ave_vcn = ave_vcn / counter
         ave_xanes = mXANES(data=[e_int, ave_xanes],
                            structure=[struct, -1, ave_vcn],
-                           xanesid=i.xanesid, source=i.source, edge=i.edge)   
+                           xanesid=i.xanesid, source=i.source, edge=i.edge)
         os.chdir(here)
         return [ave_xanes, site_xanes]
-    
+
     else:
         if skip_missing:
-            print(mpid+' is not available in local database. Skipping...')
+            print(mpid + ' is not available in local database. Skipping...')
             os.chdir(here)
             return [[], []]
         else:
-            raise FileNotFoundError(mpid 
-                                    + 'is not available in local database.')
+            raise FileNotFoundError(mpid +
+                                    'is not available in local database.')
             os.chdir(here)
-      
+
 
 class xanes_collection_feff:
     # TODO: docstring
 
     def __init__(self, absorption_specie, xanes_data=None):
 
-        
         if xanes_data is None:
-            self.xanes_data = t4iss_defaults['t4iss_xanes_data']  
+            self.xanes_data = t4iss_defaults['t4iss_xanes_data']
         else:
-            self.xanes_data = xanes_data     
-        
-        self.absorption_specie = absorption_specie        
+            self.xanes_data = xanes_data
+
+        self.absorption_specie = absorption_specie
         self.collection = []
         self.ids = []
-        
+
         self.ave_spectra = []
         self.site_spectra = []
-        
-        
+
     def build(self, mpid_list, skip_missing=True, download_missing=False,
               mpr=None):
-        
+
         if download_missing and not mpr:
             download_missing = False
             print('mpr key is needed for download_missing=True')
-                        
+
         collection0 = []
         for i in mpid_list:
             read = read_xanes_feff(mpid=i,
@@ -629,15 +627,14 @@ class xanes_collection_feff:
         for i in self.collection:
             ids.append(i[0].xanesid)
         self.ids = ids
-        
+
         ave_spectra = []
         for a in self.collection:
             ave_spectra.append(a[0])
         self.ave_spectra = ave_spectra
-            
+
         site_spectra = []
         for s in self.collection:
             for i in s[1]:
                 site_spectra.append(i)
         self.site_spectra = site_spectra
-
