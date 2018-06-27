@@ -164,12 +164,16 @@ def extract_sites_o6_s5_t4(species, transition, path=None,
     with open(path_save, 'wb') as f:
         pickle.dump(all_data, f)
 
-def extract_average_spectra(search_pattern, species, transition, path=None,
+
+def extract_average_spectra(species, transition, path=None,
                             save_as='avg_data.pkl', verbose=1):
     """Documentation is identical to extract_sites_o6_s5_t4 except that this
     function extracts the average spectra for all site-types for every
     crystal structure.
     """
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.CRITICAL)
 
     # set the path to where the extracted data is located
     if path is None:
@@ -183,9 +187,9 @@ def extract_average_spectra(search_pattern, species, transition, path=None,
     key_site_counter = 0
     directory_counter = 0
 
-    # initialize an empty dictionary which can be thought of as one hot 
-    # encoding the key will be of form O:6, T:4, etc. and the value will be 
-    # the index of the basis vector corresponding to that site - the labels 
+    # initialize an empty dictionary which can be thought of as one hot
+    # encoding the key will be of form O:6, T:4, etc. and the value will be
+    # the index of the basis vector corresponding to that site - the labels
     # will be generated after this block is run
     key_site = {}
 
@@ -206,26 +210,26 @@ def extract_average_spectra(search_pattern, species, transition, path=None,
     N_os_list_directory = len(os_list_directory)
 
     for ii, cell in enumerate(os_list_directory[:5]):
-    
+
         if verbose == 1:
             if ii % 20 == 0.0:
                 print("%i/%i" % (ii, N_os_list_directory))
-        
+
         # reset the cell counter
         cell_counter = 0
         pass_cell = False
         current_cell_data = []
-        
+
         # define a path if cell isn't = forbidden
         if cell not in forbidden:
             cell_path = os.path.join(path, str(cell))
-            
+
             try:
                 xanes_data = read_xanes(cell_path, absorption_specie=species)
             except (ValueError, FileNotFoundError):
                 # print("No %s in %s. Passing." % (species, cell_path))
                 pass_cell = True
-            
+
             # get the structure
             try:
                 structure = mg.Structure.from_file(cell_path + "/CONTCAR")
@@ -233,71 +237,74 @@ def extract_average_spectra(search_pattern, species, transition, path=None,
                 # skip if CONTCAR does not exist in the directory
                 # or if it isn't a directory at all, there are a few of those
                 pass_cell = True
-            
+
             # skip if directory is empty
             if not pass_cell:  # call this first to avoid NotADirectoryError
                 if os.listdir(cell_path) == []:
                     pass_cell = True
-            
+
             if not pass_cell:
                 # define a path to a given spectra/pickle file
                 for sample in os.listdir(cell_path):
                     if sample not in forbidden:
-                    
+
                         pass_sample = False
-                        
+
                         # cell sample path
                         csp = os.path.join(cell_path, str(sample))
 
-                        # assert that we're reading the correct species 
+                        # assert that we're reading the correct species
                         # and correct transition
                         if correct_string in csp:
                             try:
-                                with open(csp + "/xanes.pkl", 'rb') \
-                                  as pickle_file:
+                                with open(csp +
+                                          "/xanes.pkl", 'rb') as pickle_file:
                                     content = pickle.load(pickle_file)
 
-                                # ensure we end up with content to analyze, 
+                                # ensure we end up with content to analyze,
                                 # if not pass it
                                 try:
-                                    cesym = get_cesym(lgf, structure, 
+                                    save_stdout = sys.stdout
+                                    sys.stdout = open('.trash', 'w')
+                                    lgf = LocalGeometryFinder()
+                                    cesym = get_cesym(lgf, structure,
                                                       content.structure[1])
+                                    sys.stdout = save_stdout
                                 except IndexError:
                                     pass_sample = True
-                                    
+
                                 # print(all_cn_data[key[cesym[0]]])
                                 # raise ValueError
 
                                 if pass_sample:
                                     pass
                                 else:
-                                    
-                                    # add in the average data if this is the 
+                                    # add in the average data if this is the
                                     # first time the
                                     # directory / cell has been looked at
                                     if cell_counter == 0:
                                         all_cell_data.\
-                                            append([cell, directory_counter, 
+                                            append([cell, directory_counter,
                                                     deepcopy(xanes_data[0])])
-                                    
-                                    # if the symmetry label does not exist, 
-                                    # append it to the dictionary with its 
-                                    # type and index, and initialize a new 
+
+                                    # if the symmetry label does not exist,
+                                    # append it to the dictionary with its
+                                    # type and index, and initialize a new
                                     # list in all_cn_data with key_counter as
                                     # its index
                                     if cesym[0] not in key_site.keys():
                                         key_site[cesym[0]] = key_site_counter
                                         all_site_data.append([])
                                         key_site_counter += 1
-                                    
-                                    x = [cell, directory_counter, cell_counter, 
-                                         deepcopy(content), 
+
+                                    x = [cell, directory_counter, cell_counter,
+                                         deepcopy(content),
                                          cesym, content.multiplicity]
                                     all_site_data[key_site[cesym[0]]].append(x)
                                     current_cell_data.append(x)
                                     cell_counter += 1
                                     total_counter += 1
-                                
+
                             except FileNotFoundError:
                                 pass
                     
