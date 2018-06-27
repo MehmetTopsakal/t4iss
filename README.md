@@ -1,4 +1,10 @@
 # t4iss
+
+Quick reference:
+* First: set the yaml parameter file
+* To pull from the MP, use `python3 t4iss/pull_from_mp.py`
+* To extract single site information (using default parameter) and save in a pickle file, use `python3 t4iss/extract.py`
+
 Implementation of some theoretical methods for ISS at NSLS-II.
 
     # Assuming you have python 3.6+ environment through anaconda 
@@ -112,5 +118,6 @@ will be on implementing OCEAN/EXCITING calculations.
 ![](img/feff_failure.png)
 
 
-## Author
+## Authors
 * Mehmet Topsakal (mtopsakal@bnl.gov)
+* Matthew Carbone (mrc2215@columbia.edu)
