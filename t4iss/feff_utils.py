@@ -560,6 +560,7 @@ def read_xanes_feff(mpid, absorption_specie, xanes_data=None,
                     print(i.structure)
                     vcn = nnfinder.get_cn(i.structure[0], i.structure[1],
                                           use_weights=True)
+                    i.vcn = vcn
                     ave_vcn += i.vcn * i.multiplicity
                 except Exception as exc:
                     print(exc)
