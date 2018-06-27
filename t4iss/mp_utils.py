@@ -194,12 +194,34 @@ def download_xanes_from_MP_old(mpr, mpid, absorption_specie, download_to=None):
                 data_structure = xas_doc["structure"]
                 data_absorption_atom = xas_doc['absorbing_atom']
                 data_edge = xas_doc["edge"]
+
+                # x and y are the energy and intensity in two lists
                 x, y = xas_doc['spectrum']
+
                 if data_abs_specie == absorption_specie:
                     finder = SpacegroupAnalyzer(data_structure)
                     structure = finder.get_symmetrized_structure()
                     [sites, indices] = structure.equivalent_sites, \
                         structure.equivalent_indices
+
+                    """
+                    If one needs to pull structural data about the sites and
+                    equilvalent indices from a CONTCAR file, this is possible.
+
+                    This code produces a structure (structure2) that is
+                    slightly different from the above data_structure/structure
+                    (missing the last two columns) but appears to produce the
+                    same output as when using data_structure from the MP.
+
+                    file_name = '/path/to/CONTCAR'
+                    import pymatgen as mg
+                    structure2 = mg.Structure.from_file(file_name)
+                    finder = SpacegroupAnalyzer(structure2)
+                    structure = finder.get_symmetrized_structure()
+                    [sites, indices] = structure.equivalent_sites, \
+                        structure.equivalent_indices
+                    """
+
                     for m in indices:
                         if m[0] == data_absorption_atom:
                             multiplicity = len(m)
@@ -249,3 +271,105 @@ def download_xanes_from_MP_old(mpr, mpid, absorption_specie, download_to=None):
         f.write('data is missing')
         f.close()
         return []
+
+
+def screen_data(species, transition, path=None):
+    # TODO: docstring
+
+    import pymatgen as mg
+
+    total_cell_counter = 0
+    bad_cell_counter = 0
+
+    correct_string = str(species) + "-" + str(transition)
+    forbidden = [".DS_Store", "CONTCAR", "collection.pkl"]
+
+    if path is None:
+        path = t4iss_defaults['t4iss_xanes_data']
+
+    all_cells_in_path = os.listdir(path)
+
+    for i in range(len(all_cells_in_path[:120])):
+        total_cell_counter += 1
+        cell = all_cells_in_path[i]
+        cell_path = os.path.join(path, cell)
+        all_spectra_in_cell = os.listdir(cell_path)
+
+        # exclusion criteria
+        if 'WARNING_MISSING' in all_spectra_in_cell \
+           or 'WARNING_CORRUPT' in all_spectra_in_cell\
+           or 'CONTCAR' not in all_spectra_in_cell:
+            all_spectra_in_cell = []  # skip the entire thing
+            total_cell_counter -= 1
+        else:
+            contcar_name = os.path.join(cell_path, 'CONTCAR')
+            structure = mg.Structure.from_file(contcar_name)
+            finder = SpacegroupAnalyzer(structure)
+            structure2 = finder.get_symmetrized_structure()
+            indices = structure2.equivalent_indices
+
+        all_spectra_in_cell = [xx for xx in all_spectra_in_cell
+                               if xx not in forbidden]
+
+        for j in range(len(all_spectra_in_cell)):
+            spectra = all_spectra_in_cell[j]
+            csp = os.path.join(cell_path, spectra)
+
+            if correct_string not in csp:
+                pass
+
+            elif 'xanes.dat' not in os.listdir(csp) \
+                 and 'xmu.dat' not in os.listdir(csp):
+                # this means something went wrong, there should be an
+                # xanes.dat file for every one of the cells,
+                # something is missing and this entire cell could be corrupt
+                print("Warning, xanes data missing from %s" % csp)
+                f = open(os.path.join(cell_path, 'WARNING_MISSING'), 'w+')
+                f.write('xanes data is missing from one or more entry')
+                f.close()
+                bad_cell_counter -= 1
+                break
+
+            elif 'xanes.pkl' not in os.listdir(csp):
+                print("screening %s" % csp)
+                for m in indices:
+                    if str(m[0] + 1).zfill(3) in spectra:
+                        multiplicity = len(m)
+                        ind = m[0]
+                        break
+
+                try:
+                    # this file better exist, otherwise problems
+                    f = 'feff_{:03d}_{}-{}'.format(ind + 1,
+                                                   species,
+                                                   transition)
+                except: # noqa
+                    print(csp)
+                    raise RuntimeError("Unknown error during execution")
+
+                if 'xanes.dat' in os.listdir(csp):
+                    xanes_data_path = os.path.join(csp, 'xanes.dat')
+                    data = np.loadtxt(xanes_data_path)
+                else:
+                    xanes_data_path = os.path.join(csp, 'xmu.dat')
+                    data = np.loadtxt(xanes_data_path, unpack=True,
+                                      comments='#', skiprows=0)
+
+                x = np.array(data[:, 0]).squeeze()
+                y = np.array(data[:, 1]).squeeze()
+                if len(x) < 3:
+                    raise RuntimeError("You did something stupid.")
+                xanes = mXANES(data=[x, y],
+                               structure=[structure, ind],
+                               xanesid=cell,
+                               source='from_local_feff',
+                               edge=transition, multiplicity=multiplicity)
+                if xanes.vcn == []:
+                    f = open(os.path.join(cell_path, 'WARNING_MISSING'), 'w+')
+                    f.write('xanes data is missing from one or more entry')
+                    f.close()
+                else:
+                    pickle.dump(xanes, open(os.path.join(csp, 'xanes.pkl'),
+                                            'wb'))
+    print("good/total = %i/%i" % (total_cell_counter + bad_cell_counter,
+                                  total_cell_counter))
