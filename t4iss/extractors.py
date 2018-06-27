@@ -2,8 +2,6 @@
 
 """All extractors."""
 
-# pylint: disable=C0103
-
 __author__ = "Matthew Carbone"
 __email__ = "x94carbone@gmail.com"
 __status__ = "Development"
@@ -18,7 +16,6 @@ from tqdm import tqdm
 
 import logging
 
-
 # local imports
 from t4iss.cesym import get_cesym
 from defaults import t4iss_defaults
@@ -26,20 +23,21 @@ from t4iss.xanes import read_xanes
 
 # pymatgen imports
 import pymatgen as mg
-from pymatgen import Structure
-from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+# from pymatgen import Structure
+# from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from pymatgen.analysis.chemenv.coordination_environments\
-     .coordination_geometry_finder import LocalGeometryFinder
+    .coordination_geometry_finder import LocalGeometryFinder
 from pymatgen.analysis.chemenv.coordination_environments\
-     .chemenv_strategies import MultiWeightsChemenvStrategy
-from pymatgen.analysis.chemenv.coordination_environments\
-     .structure_environments import LightStructureEnvironments
+    .chemenv_strategies import MultiWeightsChemenvStrategy
+# from pymatgen.analysis.chemenv.coordination_environments\
+# .structure_environments import LightStructureEnvironments
 
 strategy = MultiWeightsChemenvStrategy.stats_article_weights_parameters()
 
+
 def extract_sites_o6_s5_t4(species, transition, path=None,
                            save_as='site_data.pkl', verbose=0):
-    """From a directory containing structure/spectra data of various crystal
+    """From a directory coentaining structure/spectra data of various crystal
     structures from the Materials Project, extract and store all site data
     corresponding to the O:6, S:5 and T:4 chemical environments.
 
@@ -90,11 +88,11 @@ def extract_sites_o6_s5_t4(species, transition, path=None,
         # reset the cell counter
         cell_counter = 0
         pass_cell = False
-        
+
         # define a path if cell isn't = forbidden
         if cell not in forbidden:
             cell_path = os.path.join(path, str(cell))
-            
+
             # get the structure
             try:
                 structure = mg.Structure.from_file(cell_path + "/CONTCAR")
@@ -102,30 +100,30 @@ def extract_sites_o6_s5_t4(species, transition, path=None,
                 # skip if CONTCAR does not exist in the directory
                 # or if it isn't a directory at all, there are a few of those
                 pass_cell = True
-            
+
             # skip if directory is empty
             if not pass_cell:  # call this first to avoid NotADirectoryError
                 if os.listdir(cell_path) == []:
                     pass_cell = True
-            
+
             if not pass_cell:
                 # define a path to a given spectra/pickle file
                 for sample in os.listdir(cell_path):
                     if sample not in forbidden:
                         pass_sample = False
-                        
+
                         # cell sample path
                         csp = os.path.join(cell_path, str(sample))
 
-                        # assert that we're reading the correct species 
+                        # assert that we're reading the correct species
                         # and correct transition
                         if correct_string in csp:
                             try:
-                                with open(csp + "/xanes.pkl", 'rb') \
-                                    as pickle_file:
+                                with open(csp +
+                                          "/xanes.pkl", 'rb') as pickle_file:
                                     content = pickle.load(pickle_file)
 
-                                # ensure we end up with content to analyze 
+                                # ensure we end up with content to analyze
                                 # if not pass it
                                 try:
                                     save_stdout = sys.stdout
@@ -164,6 +162,7 @@ def extract_sites_o6_s5_t4(species, transition, path=None,
     with open(path_save, 'wb') as f:
         pickle.dump(all_data, f)
 
+
 def extract_average_spectra(search_pattern, species, transition, path=None,
                             save_as='avg_data.pkl', verbose=1):
     """Documentation is identical to extract_sites_o6_s5_t4 except that this
@@ -173,7 +172,7 @@ def extract_average_spectra(search_pattern, species, transition, path=None,
 
     # set the path to where the extracted data is located
     if path is None:
-        path = t4iss_defaults['t4iss_data']
+        path = t4iss_defaults['t4iss_xanes_data']
 
     if verbose == 1:
         print("path is ", path)
@@ -183,9 +182,9 @@ def extract_average_spectra(search_pattern, species, transition, path=None,
     key_site_counter = 0
     directory_counter = 0
 
-    # initialize an empty dictionary which can be thought of as one hot 
-    # encoding the key will be of form O:6, T:4, etc. and the value will be 
-    # the index of the basis vector corresponding to that site - the labels 
+    # initialize an empty dictionary which can be thought of as one hot
+    # encoding the key will be of form O:6, T:4, etc. and the value will be
+    # the index of the basis vector corresponding to that site - the labels
     # will be generated after this block is run
     key_site = {}
 
@@ -206,26 +205,26 @@ def extract_average_spectra(search_pattern, species, transition, path=None,
     N_os_list_directory = len(os_list_directory)
 
     for ii, cell in enumerate(os_list_directory[:5]):
-    
+
         if verbose == 1:
             if ii % 20 == 0.0:
                 print("%i/%i" % (ii, N_os_list_directory))
-        
+
         # reset the cell counter
         cell_counter = 0
         pass_cell = False
         current_cell_data = []
-        
+
         # define a path if cell isn't = forbidden
         if cell not in forbidden:
             cell_path = os.path.join(path, str(cell))
-            
+
             try:
                 xanes_data = read_xanes(cell_path, absorption_specie=species)
             except (ValueError, FileNotFoundError):
                 # print("No %s in %s. Passing." % (species, cell_path))
                 pass_cell = True
-            
+
             # get the structure
             try:
                 structure = mg.Structure.from_file(cell_path + "/CONTCAR")
@@ -233,31 +232,31 @@ def extract_average_spectra(search_pattern, species, transition, path=None,
                 # skip if CONTCAR does not exist in the directory
                 # or if it isn't a directory at all, there are a few of those
                 pass_cell = True
-            
+
             # skip if directory is empty
             if not pass_cell:  # call this first to avoid NotADirectoryError
                 if os.listdir(cell_path) == []:
                     pass_cell = True
-            
+
             if not pass_cell:
                 # define a path to a given spectra/pickle file
                 for sample in os.listdir(cell_path):
                     if sample not in forbidden:
-                    
+
                         pass_sample = False
-                        
+
                         # cell sample path
                         csp = os.path.join(cell_path, str(sample))
 
-                        # assert that we're reading the correct species 
+                        # assert that we're reading the correct species
                         # and correct transition
                         if correct_string in csp:
                             try:
-                                with open(csp + "/xanes.pkl", 'rb') \
-                                  as pickle_file:
+                                with open(csp +
+                                          "/xanes.pkl", 'rb') as pickle_file:
                                     content = pickle.load(pickle_file)
 
-                                # ensure we end up with content to analyze, 
+                                # ensure we end up with content to analyze,
                                 # if not pass it
                                 try:
                                     cesym = get_cesym(lgf, structure, 
@@ -297,10 +296,10 @@ def extract_average_spectra(search_pattern, species, transition, path=None,
                                     current_cell_data.append(x)
                                     cell_counter += 1
                                     total_counter += 1
-                                
+
                             except FileNotFoundError:
                                 pass
-                    
+
         if pass_cell or (pass_sample and cell_counter == 0):
             pass
         else:
