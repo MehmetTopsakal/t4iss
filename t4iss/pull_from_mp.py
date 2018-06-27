@@ -36,16 +36,15 @@ def main():
 
     while ii < cutoff:
         dMP(mpr, mpids[ii], absorption_specie=protocol['absorption_species'])
-        print('%i/%i' % (ii+1, cutoff))
+        print('%i/%i' % (ii + 1, cutoff))
         ii += 1
-    
+
     # initialize the collection
     collection = xanes_collection_feff(absorption_specie='Ti')
 
     # build it
     # collection is a list of mXANES-type objects
     collection.build(mpids, skip_missing=True, download_missing=False)
-
 
     data_name = "collection.pkl"
     path_save = os.path.join(t4iss_defaults['t4iss_xanes_data'], data_name)
