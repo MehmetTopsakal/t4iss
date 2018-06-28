@@ -894,27 +894,29 @@ class Dataset:
 
             self.m = len(self.data)
 
-            # determine whether or not each training input has the same number of
-            # features
+            # determine whether or not each training input has 
+            # the same number of features
             for i, cell in enumerate(self.data):
                 if self.n != len(cell[2].E0):
                     self.n_all_same = False
 
                 if self.grid_all_same:
                     try:
-                        np.testing.assert_array_equal(self.data[i-1][2].E0, cell)
+                        np.testing.assert_array_equal(self.data[i-1][2].E0,
+                                                      cell)
                     except AssertionError:
                         self.grid_all_same = False
-              
-                # fatal error: if the number of x-points and number of y-points on a
-                # single spectra are not equal, terminate
+
+                # fatal error: if the number of x-points and number of
+                # y-points on a single spectra are not equal, terminate
                 np.testing.assert_equal(len(cell[2].E0), len(cell[2].I0))
 
-            # if by some chance all the E0 grids are identical, choose the first one
+            # if by some chance all the E0 grids are identical,
+            # choose the first one
             # and define that as the standardized grid
             if self.grid_all_same:
                 self.standardized_grid = self.data[0][2].E0
-          
+
             # determine the total number of classes
             for cell in self.data:
                 if len(cell) == 4:
@@ -1054,22 +1056,23 @@ class Dataset:
 
             avg_n = int(np.ceil(np.mean(all_n)))
             u = np.ceil(max(all_max))
-            l = np.floor(min(all_min))
+            ll = np.floor(min(all_min))
 
-            self.standardized_grid = np.linspace(l, u, avg_n, endpoint=True)
+            self.standardized_grid = np.linspace(ll, u, avg_n, endpoint=True)
             self.n = avg_n
             if self.verbose == 1:
                 print("Grid has been standardized.")
 
-
     def convert_to_numpy_arrays(self):
         """Takes a list of data of the form
         [directory name, index, t4iss.core.mXANES object, {% of coord env}]
-        and converts it to two numpy arrays, one of the data, the other the labels.
+        and converts it to two numpy arrays, one of the data, the other the
+        labels.
         """
 
         from scipy.interpolate import InterpolatedUnivariateSpline as ius
-        
+        from scipy.signal import savgol_filter as sav
+
         if self.type == np.ndarray:
             raise TypeError("Data is already of type np.ndarray.")
 
@@ -1077,32 +1080,71 @@ class Dataset:
         # or that if that isn't the case that a standardized grid has been
         # computed for spline interpolation
         if self.standardized_grid is None:
-            raise RuntimeError("All training examples do not have the same number "
-                               "of features and grid has not been standardized. "
-                               "Standardize the grid before calling this method.")
+            raise RuntimeError("All training examples do not have the same"
+                               " number of features and grid has not been"
+                               " standardized. Standardize the grid before"
+                               " calling this method.")
 
         if self.spec not in ['avg', 'site']:
             raise TypeError("Method not yet defined for this type.")
-        
+
         # initialize the X and y tensors which represent the training data and
         # the labels respectively
         X = np.empty((self.m, self.n))
         y = np.zeros((self.m, self.c))
-        
+
         # initialize the tracker to the same shape
         tracker = np.array(range(self.m), dtype='a10').reshape(self.m, 1)
-        
+
         # first, set the X matrix by running through all training examples
-        # then, set the y matrix by analyzing the classes through the dictionary
+        # then, set the y matrix by analyzing the classes through the
+        # dictionary
+        fraction_on_left = 0.9
+        lefthand_cutoff = int(fraction_on_left * self.n)
+        shifter = self.n - lefthand_cutoff
+        shifted_val = lefthand_cutoff - shifter
+        window = len(self.standardized_grid[shifted_val:]) - 5
+        if window % 2 == 0:
+            window += 1
+        smoothing_polynomial = 2
+
         if self.spec == 'avg':
             for mm, cell in enumerate(self.data):
                 # X
                 if self.grid_all_same:
                     X[mm, :] = np.array(cell[2].I0).reshape(1, self.n)
                 else:
-                    s = ius(np.squeeze(cell[2].E0), np.squeeze(cell[2].I0), k=1)
-                    E1 = np.reshape(s(np.squeeze(self.standardized_grid)), (1, self.n))
+                    # k is the smoothing parameter
+                    # ext defines the extrapolation method, default is linear
+                    # ext=3 for constant
+                    s1 = ius(np.squeeze(cell[2].E0), np.squeeze(cell[2].I0),
+                             k=1)
+                    s2 = ius(np.squeeze(cell[2].E0), np.squeeze(cell[2].I0),
+                             k=1, ext=3)
+                    E1 = np.reshape(s1(np.squeeze(self.standardized_grid)),
+                                    (1, self.n))
+                    E2 = np.reshape(s2(np.squeeze(self.standardized_grid)),
+                                    (1, self.n))
+
+                    # the left should extrapolate down to zero, then the later
+                    # checks will ensure that negative values are zero-padded
                     X[mm, :] = E1.squeeze()
+
+                    # it makes more sense, however, that the data on the right
+                    # tend to a constant
+                    X[mm, lefthand_cutoff:] = E2.squeeze()[lefthand_cutoff:]
+
+                    # finally, dramatically smooth it to make it more realistic
+                    # and consistent with experiment
+                    new_y = sav(X[mm, shifted_val:], window,
+                                smoothing_polynomial)
+                    X[mm, shifted_val:] = new_y.squeeze()
+
+                    # and slightly shift the new values so that they line up
+                    val_on_right = X[mm, shifted_val:].squeeze()[0]
+                    val_on_left = X[mm, (shifted_val - 1):].squeeze()[0]
+                    difference = val_on_right - val_on_left
+                    X[mm, shifted_val:] -= difference
 
                 # y
                 temp_dictionary = cell[3]
@@ -1110,14 +1152,14 @@ class Dataset:
                     prop = temp_dictionary[k]
                     basis_index = self.dictionary[k]
                     y[mm, basis_index] = prop
-              
+
                 # tracker
                 tracker[mm] = cell[0]
 
         else:
 
             # temporary dictionary sites
-            tds = {'O:6' : 0, 'S:5' : 1, 'T:4' : 2}
+            tds = {'O:6': 0, 'S:5': 1, 'T:4': 2}
             self.dictionary = tds
 
             # temporary counter sites
@@ -1147,26 +1189,26 @@ class Dataset:
         self.tracker = tracker
         self.original_tracker = tracker
 
-    
+
     def remove_outliers(self, remove_negative=True, remove_large=False,
                         large_cutoff=3.0, advanced=False,
                         advanced_parameter=100.0):
-    
+
         if self.data_X is None or self.data_y is None:
             raise ValueError("data_X or data_y not yet defined. Must convert to "
                              "numpy arrays first.")
-        
+
         X = self.data_X
         y = self.data_y
         tracker = self.tracker
-        
+
         initial_m = X.shape[0]
-        
+
         # there are some outliers that are mostly negative or zero
         # we want to eliminate those since they are definitely unphysical
         X_bool = [X >= 0.0][0]
         X_bool_s = np.sum(X_bool, axis=1)
-        X_lt_cutoff = X_bool_s < self.n/2
+        X_lt_cutoff = X_bool_s < self.n / 2
         X = np.delete(X, np.where(X_lt_cutoff)[0], axis=0)
         y = np.delete(y, np.where(X_lt_cutoff)[0], axis=0)
 
@@ -1179,7 +1221,7 @@ class Dataset:
             X = np.delete(X, np.where(X_cutoff)[0], axis=0)
             y = np.delete(y, np.where(X_cutoff)[0], axis=0)
             tracker = np.delete(tracker, np.where(X_cutoff)[0], axis=0)
-        
+
         if advanced:
             # compute the average spectrum
             mean_spectrum = np.mean(X, axis=0)
@@ -1195,10 +1237,12 @@ class Dataset:
 
             worst_val = max(X_sum)
 
-            X_shift = np.delete(X_shift, np.where(X_sum == max(X_sum))[0], axis=0)
+            X_shift = np.delete(X_shift, np.where(X_sum == max(X_sum))[0],
+                                axis=0)
             X = np.delete(X, np.where(X_sum == max(X_sum))[0], axis=0)
             y = np.delete(y, np.where(X_sum == max(X_sum))[0], axis=0)
-            tracker = np.delete(tracker, np.where(X_sum == max(X_sum))[0], axis=0)
+            tracker = np.delete(tracker, np.where(X_sum == max(X_sum))[0],
+                                axis=0)
 
             X_sum = np.delete(X_sum, np.where(X_sum == max(X_sum))[0], axis=0)
 
@@ -1206,18 +1250,20 @@ class Dataset:
 
             while worst_val - next_worst_val > advanced_parameter:
                 worst_val = next_worst_val
-                X_shift = np.delete(X_shift, np.where(X_sum == max(X_sum))[0], axis=0)
+                X_shift = np.delete(X_shift, np.where(X_sum == max(X_sum))[0],
+                                    axis=0)
                 X = np.delete(X, np.where(X_sum == max(X_sum))[0], axis=0)
                 y = np.delete(y, np.where(X_sum == max(X_sum))[0], axis=0)
-                tracker = np.delete(tracker, np.where(X_sum == max(X_sum))[0], axis=0)
-                X_sum = np.delete(X_sum, np.where(X_sum == max(X_sum))[0], axis=0)
+                tracker = np.delete(tracker, np.where(X_sum == max(X_sum))[0],
+                                    axis=0)
+                X_sum = np.delete(X_sum, np.where(X_sum == max(X_sum))[0],
+                                  axis=0)
                 next_worst_val = max(X_sum)
-
 
         # ensure the extrapolation didn't make some values negative
         if remove_negative:
             X[X < 0.0] = 0.0
-        
+
         final_m = X.shape[0]
 
         if self.verbose == 1:
@@ -1230,34 +1276,34 @@ class Dataset:
         print("  Negatives removed is set to %a." % remove_negative)
         print("  Remove large is set to %a." % remove_large)
         print("  Advanced removal is set to %a." % advanced)
-        
+
         self.data_X = X
         self.data_y = y
         self.m = final_m
         self.tracker = tracker
-    
-    
+
     def keep_only(self, ce=['O:6', 'S:5', 'T:4']):
-        """Allows further trimming of the dataset such that only certain labels
-        are kept. This is useful since some of the chemical environments are only
-        represented by a handful of spectra, which could mess up the training.
+        """Allows further trimming of the dataset such that only certain
+        labels are kept. This is useful since some of the chemical environments
+        are only represented by a handful of spectra, which could mess up the
+        training.
         """
-        
+
         if self.data_X is None or self.data_y is None:
-            raise ValueError("data_X or data_y not yet defined. Must convert to "
-                             "numpy arrays first.")
+            raise ValueError("data_X or data_y not yet defined. " 
+                             "Must convert to numpy arrays first.")
 
         initial_m = self.m
-        
+
         X = self.data_X
         y = self.data_y
         tracker = self.tracker
-        
+
         # iterate through the entire data set, keep only the spectra that
         # correspond to the labels in the ce variable
         # when y_multiplier is element-wise multiplied onto a label, it will
         # zero out any labels we don't want to keep anymore
-        
+
         y_multiplier = np.zeros(self.data_y[0].shape)
 
         # these will be the values we keep
@@ -1267,8 +1313,8 @@ class Dataset:
 
         # ensures the correct order
         for key, value in self.dictionary.items():
-          if key in ce:
-            new_dictionary[key] = value
+            if key in ce:
+                new_dictionary[key] = value
 
         y_multiplier_invert = y_multiplier == 0
         y_temp = self.data_y * y_multiplier_invert
@@ -1282,9 +1328,9 @@ class Dataset:
 
         # also trim the class vector
         y = np.delete(y, np.where(y_multiplier_invert)[0], axis=1)
-        
+
         final_m = y.shape[0]
-        
+
         if self.verbose == 1:
             print("Keep only execution:")
             if final_m == initial_m:
@@ -1300,13 +1346,12 @@ class Dataset:
         self.tracker = tracker
         self.dictionary = new_dictionary
 
-    
     def emergency_revert(self):
         """Revert back to the post-numpy-transform data. Useful for if you
         really screwed up your data during the process of trimming it down."""
         if self.data_X is None or self.data_y is None:
-            raise ValueError("data_X or data_y not yet defined. Must convert to "
-                             "numpy arrays first.")
+            raise ValueError("data_X or data_y not yet defined. Must convert "
+                             " to numpy arrays first.")
         self.data_X = self.original_X
         self.data_y = self.original_y
         self.traindev_X = None
@@ -1314,90 +1359,91 @@ class Dataset:
         self.test_X = None
         self.test_y = None
         self.tracker = self.original_tracker
-        
+
         if self.verbose == 1:
             print("Data reverted: stored in self.data_X and self.data_y.")
-    
-    
+
     def augment(self, energy_shift=True, energy_shift_n=1,
                 intensity_stretch=False, only_mixed=False):
         """Data augmentation suite."""
-        
+
         from scipy.interpolate import InterpolatedUnivariateSpline as ius
-        
+
         if self.data_X is None or self.data_y is None:
-            raise ValueError("data_X or data_y not yet defined. Must convert to "
-                             "numpy arrays first.")
-          
+            raise ValueError("data_X or data_y not yet defined. Must convert "
+                             " to numpy arrays first.")
+
         if self.standardized_grid is None:
-            raise ValueError("Standardized grid must be defined before running "
-                             "data augmentation.")
-        
+            raise ValueError("Standardized grid must be defined before "
+                             " running data augmentation.")
+
         X = self.data_X
         y = self.data_y
         sg = self.standardized_grid
         tracker = self.tracker
-        
+
         initial_m = self.m
 
         if energy_shift:
-            X_to_append = np.empty((X.shape[0]*energy_shift_n*2, X.shape[1]))
-            y_to_append = np.empty((y.shape[0]*energy_shift_n*2, y.shape[1]))
+            X_to_append = np.empty((X.shape[0] * energy_shift_n * 2,
+                                   X.shape[1]))
+            y_to_append = np.empty((y.shape[0] * energy_shift_n * 2,
+                                   y.shape[1]))
             tracker_to_append = \
-              np.array(range(X.shape[0]*energy_shift_n*2), 
-                       dtype='a10').reshape(X.shape[0]*energy_shift_n*2, 1)
+              np.array(range(X.shape[0] * energy_shift_n * 2),
+                       dtype='a10').reshape(X.shape[0] * energy_shift_n * 2, 1)
             counter = 0
             for i in range(self.m):
                 current_y = y[i, :]
                 current_X = X[i, :]
                 current_tracker = tracker[i, :]
                 for j in range(energy_shift_n):
-                  
+
                     # value in the units of energy here
                     shift_value = j + 1
                     grid_R = sg + shift_value
                     grid_L = sg - shift_value
-                  
-                    # treat these new grids as the actual ones and interpolate back
-                    # to the standardized grid
-                  
+
+                    # treat these new grids as the actual ones and
+                    # interpolate back to the standardized grid
+
                     sR = ius(np.squeeze(grid_R), np.squeeze(current_X), k=1)
                     ER = np.reshape(sR(np.squeeze(sg)), (1, self.n))
                     sL = ius(np.squeeze(grid_L), np.squeeze(current_X), k=1)
                     EL = np.reshape(sL(np.squeeze(sg)), (1, self.n))
-                  
+
                     X_to_append[counter, :] = np.squeeze(ER)
                     y_to_append[counter, :] = current_y
                     tracker_to_append[counter, :] = current_tracker
                     counter += 1
-            
+
                     X_to_append[counter, :] = np.squeeze(EL)
                     y_to_append[counter, :] = current_y
                     tracker_to_append[counter, :] = current_tracker
                     counter += 1
-        
+
             # ensure no negative values
             X_to_append[X_to_append < 0.0] = 0.0
-          
+
             # concatenate
             X = np.concatenate((X, X_to_append))
             y = np.concatenate((y, y_to_append))
             tracker = np.concatenate((tracker, tracker_to_append))
-          
+
             self.data_X = X
             self.data_y = y
             final_m = X.shape[0]
             self.m = X.shape[0]
             self.tracker = tracker
             self.is_shuffled = False
-          
+
             if self.verbose == 1:
                 print("Augmentation - energy shift:")
                 if final_m == initial_m:
                     print("  No data augmented.")
                 else:
-                    print("  initial -> final number of training examples: %i->%i"
-                          % (initial_m, final_m))
+                    print("  initial -> final number of training examples: "
+                          " %i->%i" % (initial_m, final_m))
 
         if intensity_stretch:
             initial_m = self.m
@@ -1457,40 +1503,39 @@ class Dataset:
                 if final_m == initial_m:
                     print("  No data augmented.")
                 else:
-                    print("  initial -> final number of training examples: %i->%i"
-                          % (initial_m, final_m))
-          
+                    print("  initial -> final number of training examples: "
+                          " %i->%i" % (initial_m, final_m))
+
     def shuffle(self, seed):
-    
+
         if self.data_X is None or self.data_y is None:
-            raise ValueError("data_X or data_y not yet defined. Must convert to "
-                             "numpy arrays first.")
-        
+            raise ValueError("data_X or data_y not yet defined. Must convert "
+                             " to numpy arrays first.")
+
         # set the seed and shuffle X
         np.random.seed(seed)
         np.random.shuffle(self.data_X)
-        
-        # set the SAME SEED and shuffle y, it is critical the seeds are the same
+
+        # set the SAME SEED and shuffle y: critical the seeds are the same
         np.random.seed(seed)
         np.random.shuffle(self.data_y)
-        
+
         # same thing for the tracker
         np.random.seed(seed)
         np.random.shuffle(self.tracker)
-        
+
         self.is_shuffled = True
-        
+
         if self.verbose == 1:
             print("Data has been shuffled with seed %i" % seed)
-    
-  
-    def get_distribution_unique(self):
-    
-        if self.data_X is None or self.data_y is None:
-            raise ValueError("data_X or data_y not yet defined. Must convert to "
-                             "numpy arrays first.")
 
-        X = self.data_X
+    def get_distribution_unique(self):
+
+        if self.data_X is None or self.data_y is None:
+            raise ValueError("data_X or data_y not yet defined. Must convert "
+                             " to numpy arrays first.")
+
+        # X = self.data_X
         y = self.data_y
         y_counter = np.zeros(y[0, :].shape)
         for i in range(y.shape[0]):
@@ -1499,44 +1544,39 @@ class Dataset:
                     y_counter[j] += 1
                     break
         return y_counter
-  
-  
+
     def trim_by_minimum(self):
-    
+
         if self.data_X is None or self.data_y is None:
-            raise ValueError("data_X or data_y not yet defined. Must convert to "
-                             "numpy arrays first.")
-        
+            raise ValueError("data_X or data_y not yet defined. Must convert "
+                             " to numpy arrays first.")
+
         if not self.is_shuffled:
             raise ValueError("Data must be shuffled to call this method.")
-        
+
         X = self.data_X
         y = self.data_y
         tracker = self.tracker
-        
+
         initial_m = X.shape[0]
-        
+
         y_counter = self.get_distribution_unique()
         min_val = int(min(y_counter))
-        for i in range(len(y_counter)):
-            if y_counter[i] == min_val:
-                min_index = i
-                break
-            
+
         mix_counter = 0
         for i in range(self.m):
             if not np.any(self.data_y[i, :] == 1):
                 mix_counter += 1
-        
-        X_new = np.empty((min_val*len(y_counter) + mix_counter, self.n))
-        y_new = np.empty((min_val*len(y_counter) + mix_counter, self.c))
-        tracker_new = np.array(range(min_val*len(y_counter) + mix_counter), 
-                               dtype='a10').reshape(min_val*len(y_counter) 
-                                                    + mix_counter, 1)
+
+        X_new = np.empty((min_val * len(y_counter) + mix_counter, self.n))
+        y_new = np.empty((min_val * len(y_counter) + mix_counter, self.c))
+        tracker_new = np.array(range(min_val * len(y_counter) + mix_counter),
+                               dtype='a10').reshape(min_val * len(y_counter) +
+                                                    mix_counter, 1)
 
         y_counter_now = [0 for i in range(len(y_counter))]
         now_counter = 0
-        
+
         for i in range(self.m):
             if not np.any(self.data_y[i, :] == 1):
                 X_new[now_counter, :] = X[i, :]
@@ -1552,13 +1592,13 @@ class Dataset:
                         y_counter_now[j] += 1
                         now_counter += 1
                         break
-        
+
         self.data_X = X_new
         self.data_y = y_new
         final_m = X_new.shape[0]
         self.m = X_new.shape[0]
         self.tracker = tracker_new
-        
+
         if self.verbose == 1:
             print("Trim by minimum:")
             if final_m == initial_m:
@@ -1567,13 +1607,12 @@ class Dataset:
                 print("  initial -> final number of training examples: %i->%i"
                       % (initial_m, final_m))
 
-
     def scale(self, method='1'):
         """Normalizes all spectra."""
 
         if self.data_X is None or self.data_y is None:
-            raise ValueError("data_X or data_y not yet defined. Must convert to "
-                             "numpy arrays first.")
+            raise ValueError("data_X or data_y not yet defined. Must convert "
+                             " to numpy arrays first.")
 
         X = self.data_X
 
@@ -1585,22 +1624,21 @@ class Dataset:
         else:
             raise RuntimeError("Method not supported.")
 
-
     def mass_augment(self, maximum_new_data=1000, randint_min=0,
                      randint_max=6, replace=False):
         """Mass data synthesis of fake data from site-spectra. Should be run
         after keeping only the minimum."""
 
         if self.data_X is None or self.data_y is None:
-            raise ValueError("data_X or data_y not yet defined. Must convert to "
-                             "numpy arrays first.")
+            raise ValueError("data_X or data_y not yet defined. Must convert "
+                             " to numpy arrays first.")
 
         if self.spec == 'avg':
             raise RuntimeError("Average data should not be mass augmented.")
 
         distribution = self.get_distribution_unique().astype(int)
 
-        if np.any(distribution/max(distribution) != 1.0):
+        if np.any(distribution / max(distribution) != 1.0):
             raise RuntimeError("Must run after keep_only.")
 
         X_tensor = np.empty((distribution[0], self.n, self.c))
@@ -1633,18 +1671,17 @@ class Dataset:
             ctotal = 0
             for __ in range(self.c):
                 cvec.append(np.random.randint(randint_min, randint_max))
-            #cvec = np.array(cvec)
-            
+
             ctotal = np.sum(cvec)
 
             # ensure we have a mixed result
-            if ctotal > 1 and not np.any((np.array(cvec)/ctotal) == 1.0):
+            if ctotal > 1 and not np.any((np.array(cvec) / ctotal) == 1.0):
 
                 # current counter for the running average
                 ccc = 0
 
                 # generate the normalized label
-                y_to_append[total_counter, :] = cvec/ctotal
+                y_to_append[total_counter, :] = cvec / ctotal
 
                 running_average = np.zeros((ctotal, self.n))
 
@@ -1653,7 +1690,7 @@ class Dataset:
 
                     # get that many random numbers that represent which
                     # spectra of class ii to get
-                    which_X = np.random.randint(0, distribution[cc_index], 
+                    which_X = np.random.randint(0, distribution[cc_index],
                                                 size=cc)
 
                     for j in which_X:
@@ -1661,7 +1698,8 @@ class Dataset:
                         ccc += 1
 
                 # sum
-                running_average = np.sum(running_average, axis=0, keepdims=True)
+                running_average = np.sum(running_average, axis=0,
+                                         keepdims=True)
 
                 # scale it
                 running_average /= ctotal
@@ -1690,23 +1728,22 @@ class Dataset:
             print("Mass augment finished: %i -> %i" % (initial_m, self.m))
             print("  Replace is %a" % replace)
 
-
     def combine(self, new_data):
         """Combines new_data with the current Dataset class."""
 
         if self.data_X is None or self.data_y is None:
-            raise ValueError("data_X or data_y not yet defined. Must convert to "
-                             "numpy arrays first.")
+            raise ValueError("data_X or data_y not yet defined. Must convert "
+                             " to numpy arrays first.")
 
         if not type(new_data).__name__ == 'Dataset':
             raise RuntimeError("New data is not of type core.Dataset.")
 
         if self.c != new_data.c:
-            raise RuntimeError("Class mismatch: %i != %i" 
+            raise RuntimeError("Class mismatch: %i != %i"
                                % (self.c, new_data.c))
 
         if self.n != new_data.n:
-            raise RuntimeError("Number of features mismatch: %i != %i" 
+            raise RuntimeError("Number of features mismatch: %i != %i"
                                % (self.n, new_data.n))
 
         X = self.data_X
@@ -1728,16 +1765,15 @@ class Dataset:
         self.data_y = y
         self.tracker = tracker
 
-
-    def print_info(self, n_each_class=False, n_mixed=True, n_unique=True, 
+    def print_info(self, n_each_class=False, n_mixed=True, n_unique=True,
                    suppress=True):
-    
+
         X = self.data_X
         y = self.data_y
-        
+
         if type(X) == np.ndarray:
-          
-            # rough indicator of how many chemical environments exist in the data
+
+            # rough indicator of how many chemical environments exist in data
             if n_each_class:
                 counter = np.zeros(y.shape[1])
                 for i in range(y.shape[0]):
@@ -1746,12 +1782,13 @@ class Dataset:
                             counter[j] += 1
                 total = np.sum(counter)
                 if total == 0:
-                    raise ValueError("Total = 0, which means something went wrong "
-                                     "with an earlier attempt to trim the data.")
+                    raise ValueError("Total = 0, which means something went "
+                                     " wrong with an earlier attempt to trim "
+                                     " the data.")
                 np.set_printoptions(suppress=suppress)
                 print(np.round(counter))
-          
-            # print the proportion of the data that contains multiple kinds of 
+
+            # print the proportion of the data that contains multiple kinds of
             # chemical environments
             n_mixed_counter = 0
             if n_mixed:
@@ -1763,14 +1800,13 @@ class Dataset:
                             # this feature vector is mixed
                             n_mixed_counter += 1
                             break  # the inner loop
-                print("The ratio of mixed/total is %i/%i" % (n_mixed_counter, self.m))
-          
+                print("The ratio of mixed/total is %i/%i" % (n_mixed_counter,
+                                                             self.m))
+
             if n_unique:
-                print("The distribution of unique spectra is ", 
+                print("The distribution of unique spectra is ",
                       self.get_distribution_unique().astype(int))
-              
+
         else:
             print(type(X))
             raise TypeError("Type not yet supported.")
-
-        
