@@ -801,10 +801,18 @@ class Dataset:
       which has a standardized grid already defined for it, then specifying
       the standardized grid ahead of time will interpolate all input data to
       this given grid
+    * sanity_cutoff_N (None-type or int) If set, any data with more data
+      points than this cutoff are discarded
+    * sanity_cutoff_min (None-type or float) If set, any data with a minimum
+      value less than this are discarded
+    * sanity_cutoff_max (None-type or float) If set, any data with a maximum
+      value greater than this are discarded
     """
   
     def __init__(self, data, spec='avg', name=None, verbose=1,
-                 standardized_grid_classwide=None):
+                 standardized_grid_classwide=None,
+                 sanity_cutoff_N=None, sanity_cutoff_min=None,
+                 sanity_cutoff_max=None, check_has_dictionary=True):
 
         self.data = data
         self.type = type(data)
@@ -859,19 +867,39 @@ class Dataset:
 
         # dictionary of basis vectors
         self.dictionary = {}
-    
+
         if self.type == list and self.spec == 'avg':
-          
+
             # determine information about the number of features
-            self.m = len(self.data)
             self.n = len(self.data[0][2].E0)
-          
+
+            # default sanity checks on ridiculous spectra
+            if check_has_dictionary:
+                self.data = list(filter(lambda x: len(x) == 4, self.data))
+
+            if sanity_cutoff_N is not None:
+                sCN = sanity_cutoff_N
+                self.data = list(filter(lambda x: len(x[2].E0) < sCN,
+                                        self.data))
+
+            if sanity_cutoff_min is not None:
+                scMin = sanity_cutoff_min
+                self.data = list(filter(lambda x: min(x[2].E0) > scMin,
+                                        self.data))
+
+            if sanity_cutoff_max is not None:
+                scMax = sanity_cutoff_max
+                self.data = list(filter(lambda x: max(x[2].E0) < scMax,
+                                        self.data))
+
+            self.m = len(self.data)
+
             # determine whether or not each training input has the same number of
             # features
             for i, cell in enumerate(self.data):
                 if self.n != len(cell[2].E0):
                     self.n_all_same = False
-              
+
                 if self.grid_all_same:
                     try:
                         np.testing.assert_array_equal(self.data[i-1][2].E0, cell)
@@ -889,10 +917,11 @@ class Dataset:
           
             # determine the total number of classes
             for cell in self.data:
-                for k in cell[3].keys():
-                    if k not in self.dictionary:
-                        self.dictionary[k] = self.c
-                        self.c += 1
+                if len(cell) == 4:
+                    for k in cell[3].keys():
+                        if k not in self.dictionary:
+                            self.dictionary[k] = self.c
+                            self.c += 1
 
 
         elif self.type == list and self.spec == 'site':
@@ -1038,6 +1067,8 @@ class Dataset:
         [directory name, index, t4iss.core.mXANES object, {% of coord env}]
         and converts it to two numpy arrays, one of the data, the other the labels.
         """
+
+        from scipy.interpolate import InterpolatedUnivariateSpline as ius
         
         if self.type == np.ndarray:
             raise TypeError("Data is already of type np.ndarray.")
@@ -1065,7 +1096,6 @@ class Dataset:
         # then, set the y matrix by analyzing the classes through the dictionary
         if self.spec == 'avg':
             for mm, cell in enumerate(self.data):
-              
                 # X
                 if self.grid_all_same:
                     X[mm, :] = np.array(cell[2].I0).reshape(1, self.n)
@@ -1293,7 +1323,7 @@ class Dataset:
                 intensity_stretch=False, only_mixed=False):
         """Data augmentation suite."""
         
-        
+        from scipy.interpolate import InterpolatedUnivariateSpline as ius
         
         if self.data_X is None or self.data_y is None:
             raise ValueError("data_X or data_y not yet defined. Must convert to "
@@ -1368,46 +1398,59 @@ class Dataset:
                 else:
                     print("  initial -> final number of training examples: %i->%i"
                           % (initial_m, final_m))
-        
+
         if intensity_stretch:
+            initial_m = self.m
+            X = self.data_X
+            y = self.data_y
+            tracker = self.tracker
+
+            all_counter = 0
             if only_mixed:
-                initial_m = self.m
-                X = self.data_X
-                y = self.data_y
-                tracker = self.tracker
-                
-                mix_counter = 0
                 for i in range(self.m):
-                    if not np.any(y[i,:] == 1):
-                        mix_counter += 1
-                X_to_append = np.empty((mix_counter, self.n))
-                y_to_append = np.zeros((mix_counter, self.c))
-                tracker_to_append = \
-                    np.array(range(mix_counter), 
-                             dtype='a10').reshape(mix_counter, 1)
+                    if not np.any(y[i, :] == 1):
+                        all_counter += 1
+            else:
+                all_counter = initial_m
+
+            X_to_append = np.empty((all_counter, self.n))
+            y_to_append = np.zeros((all_counter, self.c))
+            tracker_to_append = \
+                np.array(range(all_counter),
+                         dtype='a10').reshape(all_counter, 1)
+
+            if only_mixed:
                 counter = 0
                 for i in range(self.m):
                     if not np.any(y[i, :] == 1):
                         avg_val = np.mean(X[1, :])
-                        X_to_append[counter, :] = (X[i, :] - avg_val)*1.1 + avg_val
+                        val = (X[i, :] - avg_val) * 1.1 + avg_val
+                        X_to_append[counter, :] = val
                         y_to_append[counter, :] = y[i, :]
                         tracker_to_append[counter, :] = tracker[i, :]
                         counter += 1
-                
+            else:
+                for i in range(self.m):
+                    avg_val = np.mean(X[1, :])
+                    val = (X[i, :] - avg_val) * 1.1 + avg_val
+                    X_to_append[i, :] = val
+                    y_to_append[i, :] = y[i, :]
+                    tracker_to_append[i, :] = tracker[i, :]
+
             X_to_append[X_to_append < 0] = 0
-                
+
             # concatenate
             X = np.concatenate((X, X_to_append))
             y = np.concatenate((y, y_to_append))
             tracker = np.concatenate((tracker, tracker_to_append))
-            
+
             self.data_X = X
             self.data_y = y
             self.m = X.shape[0]
             final_m = X.shape[0]
             self.tracker = tracker
             self.is_shuffled = False
-            
+
             if self.verbose == 1:
                 print("Augmentation - intensity stretch:")
                 print("  Mixed only is %a" % only_mixed)
