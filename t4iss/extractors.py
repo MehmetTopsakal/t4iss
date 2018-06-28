@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 
-"""All extractors."""
-
-# pylint: disable=C0103
-
 __author__ = "Matthew Carbone"
 __email__ = "x94carbone@gmail.com"
 __status__ = "Development"
@@ -17,7 +13,6 @@ from copy import deepcopy
 from tqdm import tqdm
 
 import logging
-
 
 # local imports
 from t4iss.cesym import get_cesym
@@ -35,12 +30,13 @@ from pymatgen.analysis.chemenv.coordination_environments\
 # from pymatgen.analysis.chemenv.coordination_environments\
 #   .structure_environments import LightStructureEnvironments
 
+
 strategy = MultiWeightsChemenvStrategy.stats_article_weights_parameters()
 
 
 def extract_sites_o6_s5_t4(species, transition, path=None,
                            save_as='site_data.pkl', verbose=0):
-    """From a directory containing structure/spectra data of various crystal
+    """From a directory coentaining structure/spectra data of various crystal
     structures from the Materials Project, extract and store all site data
     corresponding to the O:6, S:5 and T:4 chemical environments.
 
@@ -173,6 +169,11 @@ def extract_average_spectra(species, transition, path=None,
     crystal structure.
     """
 
+    import warnings
+
+    if not sys.warnoptions:
+        warnings.simplefilter("ignore")
+
     logger = logging.getLogger()
     logger.setLevel(logging.CRITICAL)
 
@@ -187,6 +188,7 @@ def extract_average_spectra(species, transition, path=None,
     total_counter = 0
     key_site_counter = 0
     directory_counter = 0
+    n_fatal = 0
 
     # initialize an empty dictionary which can be thought of as one hot
     # encoding the key will be of form O:6, T:4, etc. and the value will be
@@ -210,10 +212,9 @@ def extract_average_spectra(species, transition, path=None,
     os_list_directory = os.listdir(path)
     os_list_directory = [xx for xx in os_list_directory
                          if (xx not in forbidden and ".pkl" not in xx)]
-
     N_os_list_directory = len(os_list_directory)
 
-    for ii in tqdm(range(3)):
+    for ii in tqdm(range(N_os_list_directory)):
         cell = os_list_directory[ii]
 
         if verbose == 1:
@@ -235,13 +236,15 @@ def extract_average_spectra(species, transition, path=None,
                 # print("No %s in %s. Passing." % (species, cell_path))
                 pass_cell = True
 
-            # get the structure
-            try:
-                structure = mg.Structure.from_file(cell_path + "/CONTCAR")
-            except (FileNotFoundError, NotADirectoryError):
-                # skip if CONTCAR does not exist in the directory
-                # or if it isn't a directory at all, there are a few of those
-                pass_cell = True
+            if not pass_cell:
+                # get the structure
+                try:
+                    structure = mg.Structure.from_file(cell_path + "/CONTCAR")
+                except (FileNotFoundError, NotADirectoryError):
+                    # skip if CONTCAR does not exist in the directory
+                    # or if it isn't a directory at all, there are a few of
+                    # those
+                    pass_cell = True
 
             # skip if directory is empty
             if not pass_cell:  # call this first to avoid NotADirectoryError
@@ -265,7 +268,6 @@ def extract_average_spectra(species, transition, path=None,
                                 with open(csp +
                                           "/xanes.pkl", 'rb') as pickle_file:
                                     content = pickle.load(pickle_file)
-
                                 # ensure we end up with content to analyze,
                                 # if not pass it
                                 try:
@@ -275,6 +277,11 @@ def extract_average_spectra(species, transition, path=None,
                                     cesym = get_cesym(lgf, structure,
                                                       content.structure[1])
                                     sys.stdout = save_stdout
+                                    if cesym == -1:
+                                        pass_cell = True
+                                        pass_sample = True
+                                        # this is a fatal error
+                                        n_fatal += 1
                                 except IndexError:
                                     pass_sample = True
 
@@ -357,6 +364,10 @@ def extract_average_spectra(species, transition, path=None,
             directory_counter += 1
 
     path_save = os.path.join(path, save_as)
+    print("saved to ", path_save)
 
     with open(path_save, 'wb') as f:
         pickle.dump(all_cell_data, f)
+
+    print("Number of fatal errors is %i." % n_fatal)
+

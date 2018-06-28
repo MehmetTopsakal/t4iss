@@ -747,9 +747,10 @@ def read_xanes(path, absorption_specie, order='eof', skip_missing=False,
                     #                       use_weights=True)
                     ave_vcn += i.vcn*i.multiplicity
                 except Exception as exc:
-                    print(exc)
-                    print('warning: vcn info is missing for site. '
-                          'ave_vnc is not correct. ')
+                    # print(exc)
+                    # print('warning: vcn info is missing for site. '
+                    #       'ave_vnc is not correct. ')
+                    pass
             counter += i.multiplicity
         ave_xanes = ave_xanes/counter
         ave_vcn = ave_vcn/counter

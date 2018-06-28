@@ -8,5 +8,5 @@ nmax_total : -1
 
 # for extracting
 extract_type : 'avg'  # or 'site', 'avg', 'screen_only'
-transition : 'K'
 
+transition : 'K'

@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 
-"""See main()."""
-
-# pylint: disable=C0103
-# pylint disable=E0401
-
+__author__ = "Matthew Carbone"
+__email__ = "x94carbone@gmail.com"
+__status__ = "Development"
+__date__ = "June 28, 2018"
 
 from yaml import safe_load
 
