@@ -57,11 +57,15 @@ def read_xanes(path, absorption_specie, order='eof', skip_missing=False,
                         xanes.append(pload)
                         break
 
+        if xanes == []:
+            raise FileNotFoundError("Likely a bad directory.")
+
         # get E limits
         minmaxs = []
         for i in xanes:
             minmaxs.append([min(i.E0), max(i.E0)])
         minmaxs = np.array(minmaxs)
+
         irange = [max(minmaxs[:, 0]), min(minmaxs[:, 1])]
         e_int = np.linspace(irange[0], irange[1],
                             int((irange[1] - irange[0]) / 0.1) + 1)

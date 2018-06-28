@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-"""All extractors."""
-
 __author__ = "Matthew Carbone"
 __email__ = "x94carbone@gmail.com"
 __status__ = "Development"
@@ -171,6 +169,11 @@ def extract_average_spectra(species, transition, path=None,
     crystal structure.
     """
 
+    import warnings
+
+    if not sys.warnoptions:
+        warnings.simplefilter("ignore")
+
     logger = logging.getLogger()
     logger.setLevel(logging.CRITICAL)
 
@@ -208,11 +211,11 @@ def extract_average_spectra(species, transition, path=None,
     os_list_directory = os.listdir(path)
     os_list_directory = [xx for xx in os_list_directory
                          if (xx not in forbidden and ".pkl" not in xx)]
-
     N_os_list_directory = len(os_list_directory)
 
-    for ii in tqdm(range(3)):
+    for ii in range(3780, 3950):  # for ii in range(3790, 3950):
         cell = os_list_directory[ii]
+        print("current cell", cell)
 
         if verbose == 1:
             if ii % 20 == 0.0:
@@ -233,13 +236,15 @@ def extract_average_spectra(species, transition, path=None,
                 # print("No %s in %s. Passing." % (species, cell_path))
                 pass_cell = True
 
-            # get the structure
-            try:
-                structure = mg.Structure.from_file(cell_path + "/CONTCAR")
-            except (FileNotFoundError, NotADirectoryError):
-                # skip if CONTCAR does not exist in the directory
-                # or if it isn't a directory at all, there are a few of those
-                pass_cell = True
+            if not pass_cell:
+                # get the structure
+                try:
+                    structure = mg.Structure.from_file(cell_path + "/CONTCAR")
+                except (FileNotFoundError, NotADirectoryError):
+                    # skip if CONTCAR does not exist in the directory
+                    # or if it isn't a directory at all, there are a few of
+                    # those
+                    pass_cell = True
 
             # skip if directory is empty
             if not pass_cell:  # call this first to avoid NotADirectoryError
@@ -286,6 +291,7 @@ def extract_average_spectra(species, transition, path=None,
                                         all_cell_data.\
                                             append([cell, directory_counter,
                                                     deepcopy(xanes_data[0])])
+                                        print(cell, 'appended')
 
                                     # if the symmetry label does not exist,
                                     # append it to the dictionary with its
@@ -306,7 +312,12 @@ def extract_average_spectra(species, transition, path=None,
                                     total_counter += 1
 
                             except FileNotFoundError:
+                                print("FNF")
                                 pass
+
+        for i in all_cell_data:
+                print(i)
+        print("---------------", directory_counter)
 
         if pass_cell or (pass_sample and cell_counter == 0):
             pass
@@ -353,8 +364,10 @@ def extract_average_spectra(species, transition, path=None,
 
             all_cell_data[directory_counter].append(temp_dictionary)
             directory_counter += 1
+            
 
     path_save = os.path.join(path, save_as)
+    print("saved to ", path_save)
 
     with open(path_save, 'wb') as f:
         pickle.dump(all_cell_data, f)
