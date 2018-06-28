@@ -52,7 +52,7 @@ class mXANES:
     def __init__(self, data=None, data_loadfrom=None, srange=None,
                  structure=None, vcncutoff=5.0, ca=None, Eonset=None,
                  xanesid=None, source=None, edge=None, multiplicity=1):
-        
+
         super(mXANES, self).__init__()
 
         # these are class-variables that were prior not defined in __init__
@@ -61,69 +61,69 @@ class mXANES:
 
         if data is None:
             if data_loadfrom:
-                data = np.loadtxt(data_loadfrom, unpack=True, comments='#', 
+                data = np.loadtxt(data_loadfrom, unpack=True, comments='#',
                                   skiprows=0)
                 self.E0 = np.array(data[0])
-                self.I0 = np.array(data[1])                
+                self.I0 = np.array(data[1])
             else:
-                self.E0 = np.array([])                
-                self.I0 = np.array([])                               
+                self.E0 = np.array([])
+                self.I0 = np.array([])
         else:
             self.E0 = np.array(data[0])
             self.I0 = np.array(data[1])
-            
+
         if srange:
             sel = (self.E0 >= srange[0]) & (self.E0 <= srange[1])
             self.E0 = self.E0[sel]
-            self.I0 = self.I0[sel]            
+            self.I0 = self.I0[sel]
 
         # Energy offset
         if Eonset is None:
             self.Eonset = self.E0[0]
         else:
             self.Eonset = Eonset
-            
+
         # XANES id
         if xanesid is None:
             self.xanesid = 'not_set'
         else:
-            self.xanesid = xanesid 
-            
+            self.xanesid = xanesid
+
         # XANES edge
         if edge is None:
             self.edge = 'not_set'
         else:
-            self.edge = edge         
-            
+            self.edge = edge
+
         # source
         if source is None:
             self.source = 'not_set'
         else:
-            self.source = source         
- 
+            self.source = source
+
         # source
         if ca is None:
             self.ca = 'not_set'
         else:
-            self.ca = ca     
-            
+            self.ca = ca
+
         # structure
         if structure:
-            try:               
-                self.ca = structure[0][structure[1]].species_string            
+            try:
+                self.ca = structure[0][structure[1]].species_string
                 nnfinder = VoronoiNN(cutoff=vcncutoff, allow_pathological=True)
                 vcn = nnfinder.get_cn(structure[0], structure[1],
                                       use_weights=True)
                 self.vcn = vcn
-                self.structure = [structure[0], structure[1],vcn]
+                self.structure = [structure[0], structure[1], vcn]
             except Exception as exc:
-                print(exc)
-                self.structure = [structure[0], structure[1],[]]
+                print("  Failed to get nearest neighbors.")
+                self.structure = [structure[0], structure[1], []]
                 self.vcn = []
         else:
-            self.structure = [[], [], []] 
+            self.structure = [[], [], []]
             self.vcn = []
-        
+
         self.peaks = []
         self.multiplicity = multiplicity
         
@@ -722,23 +722,23 @@ def read_xanes(path, absorption_specie, order='eof', skip_missing=False,
         minmaxs = np.array(minmaxs)    
         irange = [max(minmaxs[:, 0]), min(minmaxs[:, 1])]   
         e_int = np.linspace(irange[0], irange[1],
-                            int((irange[1]-irange[0])/0.1)+1)
+                            int((irange[1] - irange[0]) / 0.1) + 1)
 
-        ave_xanes = e_int*0
+        ave_xanes = e_int * 0
         ave_vcn = 0
         site_xanes = []
         counter = 0
         for i in xanes:
             i.transform(irange=irange, normalize=None, y0shift=None)
-            ave_xanes += i.I*i.multiplicity
+            ave_xanes += i.I * i.multiplicity
             site_onset = i.Eonset
             site_xanes.append(mXANES(data=[i.E, i.I], structure=i.structure,
                                      xanesid=i.xanesid, source=i.source,
                                      Eonset=site_onset,
                                      edge=i.edge,
-                                     multiplicity=i.multiplicity)) 
+                                     multiplicity=i.multiplicity))
             if i.vcn:
-                ave_vcn += i.vcn*i.multiplicity 
+                ave_vcn += i.vcn*i.multiplicity
             else:
                 try:
                     nnfinder = VoronoiNN(cutoff=10, allow_pathological=True)

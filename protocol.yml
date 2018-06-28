@@ -7,6 +7,6 @@ nmax_atoms : 201
 nmax_total : -1
 
 # for extracting
-extract_type : 'avg'  # or 'site'
-transition : 'K'
+extract_type : 'avg'  # or 'site', 'avg', 'screen_only'
 
+transition : 'K'

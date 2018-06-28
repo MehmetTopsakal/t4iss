@@ -30,7 +30,8 @@ from pymatgen.analysis.chemenv.coordination_environments\
 from pymatgen.analysis.chemenv.coordination_environments\
     .chemenv_strategies import MultiWeightsChemenvStrategy
 # from pymatgen.analysis.chemenv.coordination_environments\
-# .structure_environments import LightStructureEnvironments
+#   .structure_environments import LightStructureEnvironments
+
 
 strategy = MultiWeightsChemenvStrategy.stats_article_weights_parameters()
 
@@ -163,12 +164,15 @@ def extract_sites_o6_s5_t4(species, transition, path=None,
         pickle.dump(all_data, f)
 
 
-def extract_average_spectra(search_pattern, species, transition, path=None,
-                            save_as='avg_data.pkl', verbose=1):
+def extract_average_spectra(species, transition, path=None,
+                            save_as='avg_data.pkl', verbose=0):
     """Documentation is identical to extract_sites_o6_s5_t4 except that this
     function extracts the average spectra for all site-types for every
     crystal structure.
     """
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.CRITICAL)
 
     # set the path to where the extracted data is located
     if path is None:
@@ -194,7 +198,7 @@ def extract_average_spectra(search_pattern, species, transition, path=None,
 
     # these files will end up raising errors during execution of the
     # following loops - avoid them
-    forbidden = [".DS_Store", "CONTCAR", "*.pkl"]
+    forbidden = [".DS_Store", "CONTCAR"]
 
     # assert that only strings with the correct species and transition are
     # added to the training dataset
@@ -202,9 +206,13 @@ def extract_average_spectra(search_pattern, species, transition, path=None,
 
     # for cell (e.g. mp-390) in the desired data directory
     os_list_directory = os.listdir(path)
+    os_list_directory = [xx for xx in os_list_directory
+                         if (xx not in forbidden and ".pkl" not in xx)]
+
     N_os_list_directory = len(os_list_directory)
 
-    for ii, cell in enumerate(os_list_directory[:5]):
+    for ii in tqdm(range(3)):
+        cell = os_list_directory[ii]
 
         if verbose == 1:
             if ii % 20 == 0.0:
@@ -259,38 +267,38 @@ def extract_average_spectra(search_pattern, species, transition, path=None,
                                 # ensure we end up with content to analyze,
                                 # if not pass it
                                 try:
-                                    cesym = get_cesym(lgf, structure, 
+                                    save_stdout = sys.stdout
+                                    sys.stdout = open('.trash', 'w')
+                                    lgf = LocalGeometryFinder()
+                                    cesym = get_cesym(lgf, structure,
                                                       content.structure[1])
+                                    sys.stdout = save_stdout
                                 except IndexError:
                                     pass_sample = True
-                                    
-                                # print(all_cn_data[key[cesym[0]]])
-                                # raise ValueError
 
                                 if pass_sample:
                                     pass
                                 else:
-                                    
-                                    # add in the average data if this is the 
+                                    # add in the average data if this is the
                                     # first time the
                                     # directory / cell has been looked at
                                     if cell_counter == 0:
                                         all_cell_data.\
-                                            append([cell, directory_counter, 
+                                            append([cell, directory_counter,
                                                     deepcopy(xanes_data[0])])
-                                    
-                                    # if the symmetry label does not exist, 
-                                    # append it to the dictionary with its 
-                                    # type and index, and initialize a new 
+
+                                    # if the symmetry label does not exist,
+                                    # append it to the dictionary with its
+                                    # type and index, and initialize a new
                                     # list in all_cn_data with key_counter as
                                     # its index
                                     if cesym[0] not in key_site.keys():
                                         key_site[cesym[0]] = key_site_counter
                                         all_site_data.append([])
                                         key_site_counter += 1
-                                    
-                                    x = [cell, directory_counter, cell_counter, 
-                                         deepcopy(content), 
+
+                                    x = [cell, directory_counter, cell_counter,
+                                         deepcopy(content),
                                          cesym, content.multiplicity]
                                     all_site_data[key_site[cesym[0]]].append(x)
                                     current_cell_data.append(x)
@@ -303,38 +311,38 @@ def extract_average_spectra(search_pattern, species, transition, path=None,
         if pass_cell or (pass_sample and cell_counter == 0):
             pass
         else:
-            # sanity check - can cross-reference with the atom id's using 
+            # sanity check - can cross-reference with the atom id's using
             # VESTA
             # finder = SpacegroupAnalyzer(structure)
             # struct = finder.get_symmetrized_structure()
-            # [sites, indices]  = struct.equivalent_sites, 
+            # [sites, indices]  = struct.equivalent_sites,
             # struct.equivalent_indices
             # print(directory_counter, indices)
-            
-            # for every cell / directory (e.g. mvc-16746), generate an 
-            # individual dictionary which labels the proportion of each 
+
+            # for every cell / directory (e.g. mvc-16746), generate an
+            # individual dictionary which labels the proportion of each
             # coordination number present in the crystal structure
             temp_dictionary = {}
-            
+
             # running counter of all the multiplicity numbers
             total_multiplicity = 0
-            
+
             for xx in current_cell_data:
-            
+
                 # current multiplicity of xx
                 cm = xx[3].multiplicity
-                
-                # if the current ce symbol does not exist in the 
-                # temp_dictionary, create it and initialize its counter equal 
+
+                # if the current ce symbol does not exist in the
+                # temp_dictionary, create it and initialize its counter equal
                 # to the multiplicity of that entry
                 if xx[4][0] not in temp_dictionary.keys():
                     temp_dictionary[xx[4][0]] = cm
-                
-                # else, it must have been previously initialized, and so we 
+
+                # else, it must have been previously initialized, and so we
                 # should add the multiplicity to it
                 else:
                     temp_dictionary[xx[4][0]] += cm
-                
+
                 # append the total multiplicity for normalizing later
                 total_multiplicity += cm
 
@@ -345,7 +353,7 @@ def extract_average_spectra(search_pattern, species, transition, path=None,
 
             all_cell_data[directory_counter].append(temp_dictionary)
             directory_counter += 1
-    
+
     path_save = os.path.join(path, save_as)
 
     with open(path_save, 'wb') as f:
