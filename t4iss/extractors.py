@@ -188,6 +188,7 @@ def extract_average_spectra(species, transition, path=None,
     total_counter = 0
     key_site_counter = 0
     directory_counter = 0
+    n_fatal = 0
 
     # initialize an empty dictionary which can be thought of as one hot
     # encoding the key will be of form O:6, T:4, etc. and the value will be
@@ -213,9 +214,8 @@ def extract_average_spectra(species, transition, path=None,
                          if (xx not in forbidden and ".pkl" not in xx)]
     N_os_list_directory = len(os_list_directory)
 
-    for ii in range(3780, 3950):  # for ii in range(3790, 3950):
+    for ii in tqdm(range(N_os_list_directory)):
         cell = os_list_directory[ii]
-        print("current cell", cell)
 
         if verbose == 1:
             if ii % 20 == 0.0:
@@ -268,7 +268,6 @@ def extract_average_spectra(species, transition, path=None,
                                 with open(csp +
                                           "/xanes.pkl", 'rb') as pickle_file:
                                     content = pickle.load(pickle_file)
-
                                 # ensure we end up with content to analyze,
                                 # if not pass it
                                 try:
@@ -278,6 +277,11 @@ def extract_average_spectra(species, transition, path=None,
                                     cesym = get_cesym(lgf, structure,
                                                       content.structure[1])
                                     sys.stdout = save_stdout
+                                    if cesym == -1:
+                                        pass_cell = True
+                                        pass_sample = True
+                                        # this is a fatal error
+                                        n_fatal += 1
                                 except IndexError:
                                     pass_sample = True
 
@@ -291,7 +295,6 @@ def extract_average_spectra(species, transition, path=None,
                                         all_cell_data.\
                                             append([cell, directory_counter,
                                                     deepcopy(xanes_data[0])])
-                                        print(cell, 'appended')
 
                                     # if the symmetry label does not exist,
                                     # append it to the dictionary with its
@@ -312,12 +315,7 @@ def extract_average_spectra(species, transition, path=None,
                                     total_counter += 1
 
                             except FileNotFoundError:
-                                print("FNF")
                                 pass
-
-        for i in all_cell_data:
-                print(i)
-        print("---------------", directory_counter)
 
         if pass_cell or (pass_sample and cell_counter == 0):
             pass
@@ -364,10 +362,12 @@ def extract_average_spectra(species, transition, path=None,
 
             all_cell_data[directory_counter].append(temp_dictionary)
             directory_counter += 1
-            
 
     path_save = os.path.join(path, save_as)
     print("saved to ", path_save)
 
     with open(path_save, 'wb') as f:
         pickle.dump(all_cell_data, f)
+
+    print("Number of fatal errors is %i." % n_fatal)
+

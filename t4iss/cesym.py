@@ -44,4 +44,7 @@ def get_cesym(lgf, structure, site):
     # "The environment of the atom is then the model polyhedron for which 
     # the similarity is the highest, that is, for which the CSM is the lowest."
     # in this case, it looks like O:6 (octahedral?)
-    return [coor[site][0]['ce_symbol'], coor[site][0]['csm']]
+    try:
+        return [coor[site][0]['ce_symbol'], coor[site][0]['csm']]
+    except IndexError:  # list out of range
+        return -1
