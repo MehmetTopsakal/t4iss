@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # coding: utf-8
 
 """
@@ -282,15 +284,16 @@ def screen_data(species, transition, path=None):
     bad_cell_counter = 0
 
     correct_string = str(species) + "-" + str(transition)
-    forbidden = [".DS_Store", "CONTCAR", "collection.pkl"]
+    forbidden = [".DS_Store", "CONTCAR", "Icon\r"]
 
     if path is None:
         path = t4iss_defaults['t4iss_xanes_data']
 
     all_cells_in_path = os.listdir(path)
+    all_cells_in_path = [xx for xx in all_cells_in_path
+                         if (xx not in forbidden and ".pkl" not in xx)]
 
-    for i in range(len(all_cells_in_path[:120])):
-        total_cell_counter += 1
+    for i in range(len(all_cells_in_path)):
         cell = all_cells_in_path[i]
         cell_path = os.path.join(path, cell)
         all_spectra_in_cell = os.listdir(cell_path)
@@ -300,7 +303,6 @@ def screen_data(species, transition, path=None):
            or 'WARNING_CORRUPT' in all_spectra_in_cell\
            or 'CONTCAR' not in all_spectra_in_cell:
             all_spectra_in_cell = []  # skip the entire thing
-            total_cell_counter -= 1
         else:
             contcar_name = os.path.join(cell_path, 'CONTCAR')
             structure = mg.Structure.from_file(contcar_name)
@@ -327,7 +329,6 @@ def screen_data(species, transition, path=None):
                 f = open(os.path.join(cell_path, 'WARNING_MISSING'), 'w+')
                 f.write('xanes data is missing from one or more entry')
                 f.close()
-                bad_cell_counter -= 1
                 break
 
             elif 'xanes.pkl' not in os.listdir(csp):
@@ -371,5 +372,17 @@ def screen_data(species, transition, path=None):
                 else:
                     pickle.dump(xanes, open(os.path.join(csp, 'xanes.pkl'),
                                             'wb'))
-    print("good/total = %i/%i" % (total_cell_counter + bad_cell_counter,
+            else:
+                print("passing %s" % csp)
+
+    for i in range(len(all_cells_in_path)):
+        total_cell_counter += 1
+        cell = all_cells_in_path[i]
+        cell_path = os.path.join(path, cell)
+        all_spectra_in_cell = os.listdir(cell_path)
+        if 'WARNING_MISSING' in all_spectra_in_cell \
+           or 'WARNING_CORRUPT' in all_spectra_in_cell:
+            bad_cell_counter += 1
+
+    print("good/total = %i/%i" % (total_cell_counter - bad_cell_counter,
                                   total_cell_counter))

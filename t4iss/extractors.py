@@ -26,16 +26,17 @@ from t4iss.xanes import read_xanes
 
 # pymatgen imports
 import pymatgen as mg
-from pymatgen import Structure
-from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+# from pymatgen import Structure
+# from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from pymatgen.analysis.chemenv.coordination_environments\
-     .coordination_geometry_finder import LocalGeometryFinder
+    .coordination_geometry_finder import LocalGeometryFinder
 from pymatgen.analysis.chemenv.coordination_environments\
-     .chemenv_strategies import MultiWeightsChemenvStrategy
-from pymatgen.analysis.chemenv.coordination_environments\
-     .structure_environments import LightStructureEnvironments
+    .chemenv_strategies import MultiWeightsChemenvStrategy
+# from pymatgen.analysis.chemenv.coordination_environments\
+#   .structure_environments import LightStructureEnvironments
 
 strategy = MultiWeightsChemenvStrategy.stats_article_weights_parameters()
+
 
 def extract_sites_o6_s5_t4(species, transition, path=None,
                            save_as='site_data.pkl', verbose=0):
@@ -90,11 +91,11 @@ def extract_sites_o6_s5_t4(species, transition, path=None,
         # reset the cell counter
         cell_counter = 0
         pass_cell = False
-        
+
         # define a path if cell isn't = forbidden
         if cell not in forbidden:
             cell_path = os.path.join(path, str(cell))
-            
+
             # get the structure
             try:
                 structure = mg.Structure.from_file(cell_path + "/CONTCAR")
@@ -102,30 +103,30 @@ def extract_sites_o6_s5_t4(species, transition, path=None,
                 # skip if CONTCAR does not exist in the directory
                 # or if it isn't a directory at all, there are a few of those
                 pass_cell = True
-            
+
             # skip if directory is empty
             if not pass_cell:  # call this first to avoid NotADirectoryError
                 if os.listdir(cell_path) == []:
                     pass_cell = True
-            
+
             if not pass_cell:
                 # define a path to a given spectra/pickle file
                 for sample in os.listdir(cell_path):
                     if sample not in forbidden:
                         pass_sample = False
-                        
+
                         # cell sample path
                         csp = os.path.join(cell_path, str(sample))
 
-                        # assert that we're reading the correct species 
+                        # assert that we're reading the correct species
                         # and correct transition
                         if correct_string in csp:
                             try:
-                                with open(csp + "/xanes.pkl", 'rb') \
-                                    as pickle_file:
+                                with open(csp +
+                                          "/xanes.pkl", 'rb') as pickle_file:
                                     content = pickle.load(pickle_file)
 
-                                # ensure we end up with content to analyze 
+                                # ensure we end up with content to analyze
                                 # if not pass it
                                 try:
                                     save_stdout = sys.stdout
@@ -166,7 +167,7 @@ def extract_sites_o6_s5_t4(species, transition, path=None,
 
 
 def extract_average_spectra(species, transition, path=None,
-                            save_as='avg_data.pkl', verbose=1):
+                            save_as='avg_data.pkl', verbose=0):
     """Documentation is identical to extract_sites_o6_s5_t4 except that this
     function extracts the average spectra for all site-types for every
     crystal structure.
@@ -177,7 +178,7 @@ def extract_average_spectra(species, transition, path=None,
 
     # set the path to where the extracted data is located
     if path is None:
-        path = t4iss_defaults['t4iss_data']
+        path = t4iss_defaults['t4iss_xanes_data']
 
     if verbose == 1:
         print("path is ", path)
@@ -199,7 +200,7 @@ def extract_average_spectra(species, transition, path=None,
 
     # these files will end up raising errors during execution of the
     # following loops - avoid them
-    forbidden = [".DS_Store", "CONTCAR", "*.pkl"]
+    forbidden = [".DS_Store", "CONTCAR"]
 
     # assert that only strings with the correct species and transition are
     # added to the training dataset
@@ -207,9 +208,13 @@ def extract_average_spectra(species, transition, path=None,
 
     # for cell (e.g. mp-390) in the desired data directory
     os_list_directory = os.listdir(path)
+    os_list_directory = [xx for xx in os_list_directory
+                         if (xx not in forbidden and ".pkl" not in xx)]
+
     N_os_list_directory = len(os_list_directory)
 
-    for ii, cell in enumerate(os_list_directory[:5]):
+    for ii in tqdm(range(3)):
+        cell = os_list_directory[ii]
 
         if verbose == 1:
             if ii % 20 == 0.0:
@@ -273,9 +278,6 @@ def extract_average_spectra(species, transition, path=None,
                                 except IndexError:
                                     pass_sample = True
 
-                                # print(all_cn_data[key[cesym[0]]])
-                                # raise ValueError
-
                                 if pass_sample:
                                     pass
                                 else:
@@ -307,42 +309,42 @@ def extract_average_spectra(species, transition, path=None,
 
                             except FileNotFoundError:
                                 pass
-                    
+
         if pass_cell or (pass_sample and cell_counter == 0):
             pass
         else:
-            # sanity check - can cross-reference with the atom id's using 
+            # sanity check - can cross-reference with the atom id's using
             # VESTA
             # finder = SpacegroupAnalyzer(structure)
             # struct = finder.get_symmetrized_structure()
-            # [sites, indices]  = struct.equivalent_sites, 
+            # [sites, indices]  = struct.equivalent_sites,
             # struct.equivalent_indices
             # print(directory_counter, indices)
-            
-            # for every cell / directory (e.g. mvc-16746), generate an 
-            # individual dictionary which labels the proportion of each 
+
+            # for every cell / directory (e.g. mvc-16746), generate an
+            # individual dictionary which labels the proportion of each
             # coordination number present in the crystal structure
             temp_dictionary = {}
-            
+
             # running counter of all the multiplicity numbers
             total_multiplicity = 0
-            
+
             for xx in current_cell_data:
-            
+
                 # current multiplicity of xx
                 cm = xx[3].multiplicity
-                
-                # if the current ce symbol does not exist in the 
-                # temp_dictionary, create it and initialize its counter equal 
+
+                # if the current ce symbol does not exist in the
+                # temp_dictionary, create it and initialize its counter equal
                 # to the multiplicity of that entry
                 if xx[4][0] not in temp_dictionary.keys():
                     temp_dictionary[xx[4][0]] = cm
-                
-                # else, it must have been previously initialized, and so we 
+
+                # else, it must have been previously initialized, and so we
                 # should add the multiplicity to it
                 else:
                     temp_dictionary[xx[4][0]] += cm
-                
+
                 # append the total multiplicity for normalizing later
                 total_multiplicity += cm
 
@@ -353,7 +355,7 @@ def extract_average_spectra(species, transition, path=None,
 
             all_cell_data[directory_counter].append(temp_dictionary)
             directory_counter += 1
-    
+
     path_save = os.path.join(path, save_as)
 
     with open(path_save, 'wb') as f:
