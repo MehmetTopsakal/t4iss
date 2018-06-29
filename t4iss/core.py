@@ -868,6 +868,11 @@ class Dataset:
         # dictionary of basis vectors
         self.dictionary = {}
 
+        # sanity cutoffs
+        self.sanity_max = False
+        self.sanity_min = False
+        self.sanity_N = False
+
         if self.type == list and self.spec == 'avg':
 
             # determine information about the number of features
@@ -881,16 +886,19 @@ class Dataset:
                 sCN = sanity_cutoff_N
                 self.data = list(filter(lambda x: len(x[2].E0) < sCN,
                                         self.data))
+                self.sanity_N = True
 
             if sanity_cutoff_min is not None:
                 scMin = sanity_cutoff_min
                 self.data = list(filter(lambda x: min(x[2].E0) > scMin,
                                         self.data))
+                self.sanity_min = True
 
             if sanity_cutoff_max is not None:
                 scMax = sanity_cutoff_max
                 self.data = list(filter(lambda x: max(x[2].E0) < scMax,
                                         self.data))
+                self.sanity_max = True
 
             self.m = len(self.data)
 
@@ -995,15 +1003,41 @@ class Dataset:
             print("\nWARNING: CHECKS FAILED")
             for test in failed_tests:
                 print(test)
-    
 
-    def generate_standardized_grid(self):
+    def align_spectra_left(self):
+        """Method called by the generate_standardized_grid method to
+        align the grid at the leftmost point."""
+
+        if not self.sanity_min:
+            raise RuntimeError("Do not call this method before executing the "
+                               "min-sanity check.")
+
+        if not self.spec == 'avg':
+            raise RuntimeError("This method only supports spec == 'avg'.")
+
+        # get the overall min:
+        all_min = []
+        for cell in self.data:
+            spectra_E0 = cell[2].E0
+            all_min.append(min(spectra_E0))
+
+        overall_min = min(all_min)
+
+        # for every spectra, determine the difference between its leftmost
+        # point and the overall minimum, then shift its grid
+        for i in range(self.m):
+            diff = self.data[i][2].E0[0] - overall_min
+            self.data[i][2].E0 = [x - diff for x in self.data[i][2].E0]
+
+    def generate_standardized_grid(self, align_left=False):
         """Inputs data and uses splines to interpolate it all onto a standard
-        grid such that the feature entries match up."""
-        
+        grid such that the feature entries match up. Also takes a flag
+        align_left, which if set to True will shift all spectra so that their
+        left-most points all coincide."""
+
         if self.spec not in ['avg', 'site']:
             raise TypeError("Method not yet defined for this type.")
-        
+
         elif self.grid_all_same:
             if self.verbose == 1:
                 print("Grid is already standardized, nothing will be changed.")
@@ -1014,12 +1048,15 @@ class Dataset:
             # this grid
             if self.verbose == 1:
                 print("Grid has been provided, nothing will be changed.")
-        
+
         elif self.spec == 'avg':
             all_n = []
             all_max = []
             all_min = []
-       
+
+            if align_left:
+                self.align_spectra_left()
+
             for cell in self.data:
                 spectra_E0 = cell[2].E0
                 all_n.append(len(spectra_E0))
@@ -1028,15 +1065,15 @@ class Dataset:
 
             # these will be the values used in the splines interpolation
             avg_n = int(np.ceil(np.mean(all_n)))
-            u = np.ceil(max(all_max))
-            l = np.floor(min(all_min))
+            u = max(all_max)
+            ll = min(all_min)
 
             # define the standardized grid
-            self.standardized_grid = np.linspace(l, u, avg_n, endpoint=True)
-          
+            self.standardized_grid = np.linspace(ll, u, avg_n, endpoint=True)
+
             # redefine the number of features
             self.n = avg_n
-          
+
             if self.verbose == 1:
                 print("Grid has been standardized.")
 
@@ -1189,14 +1226,13 @@ class Dataset:
         self.tracker = tracker
         self.original_tracker = tracker
 
-
     def remove_outliers(self, remove_negative=True, remove_large=False,
                         large_cutoff=3.0, advanced=False,
                         advanced_parameter=100.0):
 
         if self.data_X is None or self.data_y is None:
-            raise ValueError("data_X or data_y not yet defined. Must convert to "
-                             "numpy arrays first.")
+            raise ValueError("data_X or data_y not yet defined. Must convert "
+                             " to numpy arrays first.")
 
         X = self.data_X
         y = self.data_y
@@ -1363,7 +1399,7 @@ class Dataset:
         if self.verbose == 1:
             print("Data reverted: stored in self.data_X and self.data_y.")
 
-    def augment(self, energy_shift=True, energy_shift_n=1,
+    def augment(self, energy_shift=True, energy_shift_n=1, shift_multipler=5.0,
                 intensity_stretch=False, only_mixed=False):
         """Data augmentation suite."""
 
@@ -1380,18 +1416,20 @@ class Dataset:
         X = self.data_X
         y = self.data_y
         sg = self.standardized_grid
+        d_sg = sg[1] - sg[0]
         tracker = self.tracker
 
         initial_m = self.m
 
         if energy_shift:
             X_to_append = np.empty((X.shape[0] * energy_shift_n * 2,
-                                   X.shape[1]))
+                                    X.shape[1]))
             y_to_append = np.empty((y.shape[0] * energy_shift_n * 2,
-                                   y.shape[1]))
+                                    y.shape[1]))
             tracker_to_append = \
-              np.array(range(X.shape[0] * energy_shift_n * 2),
-                       dtype='a10').reshape(X.shape[0] * energy_shift_n * 2, 1)
+                np.array(range(X.shape[0] * energy_shift_n * 2),
+                         dtype='a10').reshape(X.shape[0] * energy_shift_n * 2,
+                                              1)
             counter = 0
             for i in range(self.m):
                 current_y = y[i, :]
@@ -1400,7 +1438,7 @@ class Dataset:
                 for j in range(energy_shift_n):
 
                     # value in the units of energy here
-                    shift_value = j + 1
+                    shift_value = d_sg * shfit_multiplier
                     grid_R = sg + shift_value
                     grid_L = sg - shift_value
 
